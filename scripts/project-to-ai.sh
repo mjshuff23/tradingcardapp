@@ -6,18 +6,19 @@ IGNORE_PATTERN="node_modules|\.git|dist|build|package-lock\.json|yarn\.lock|proj
 OUTPUT_FILE="project-dump.txt"
 
 FILE_LIST=$(git ls-files -co --exclude-standard 2>/dev/null)
+FILTERED_FILE_LIST=$(printf "%s\n" "$FILE_LIST" | grep -vE "$IGNORE_PATTERN" || true)
 
 {
     echo "--- PROJECT STRUCTURE ---"
     if command -v tree >/dev/null 2>&1; then
-        if [ -n "$FILE_LIST" ]; then
-            printf "%s\n" "$FILE_LIST" | tree --fromfile
+        if [ -n "$FILTERED_FILE_LIST" ]; then
+            printf "%s\n" "$FILTERED_FILE_LIST" | tree --fromfile
         else
             tree -I "$IGNORE_PATTERN"
         fi
     else
-        if [ -n "$FILE_LIST" ]; then
-            printf "%s\n" "$FILE_LIST"
+        if [ -n "$FILTERED_FILE_LIST" ]; then
+            printf "%s\n" "$FILTERED_FILE_LIST"
         else
             find . -type f | grep -vE "$IGNORE_PATTERN"
         fi
@@ -25,8 +26,8 @@ FILE_LIST=$(git ls-files -co --exclude-standard 2>/dev/null)
 
     echo -e "\n--- FILE CONTENTS ---"
 
-    if [ -n "$FILE_LIST" ]; then
-        printf "%s\n" "$FILE_LIST" | while read -r file; do
+    if [ -n "$FILTERED_FILE_LIST" ]; then
+        printf "%s\n" "$FILTERED_FILE_LIST" | while read -r file; do
             if [ -f "$file" ]; then
                 echo "========================================"
                 echo "FILE: $file"
