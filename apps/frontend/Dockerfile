@@ -11,4 +11,4 @@ COPY apps/frontend apps/frontend
 
 EXPOSE 3000
 
-CMD ["npm", "run", "dev", "-w", "apps/frontend", "--", "--hostname", "0.0.0.0", "--port", "3000"]
+CMD ["npm", "run", "dev", "-w", "apps/frontend", "--", "--webpack", "--hostname", "0.0.0.0", "--port", "3000"]
