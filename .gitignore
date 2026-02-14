@@ -33,6 +33,7 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 project-dump.txt
+apps/backend/.local-storage/
 
 # IDE
 .vscode/

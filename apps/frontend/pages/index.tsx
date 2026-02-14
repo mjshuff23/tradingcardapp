@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 type HealthState = 'checking' | 'up' | 'down';
 
@@ -33,7 +34,7 @@ export default function Home() {
   return (
     <div style={{ fontFamily: 'system-ui', padding: '2rem' }}>
       <h1>Trading Card App Binder</h1>
-      <p>Welcome to your virtual binder! (Scanner coming soon)</p>
+      <p>Welcome to your virtual binder MVP.</p>
       <div
         style={{
           display: 'inline-flex',
@@ -56,6 +57,10 @@ export default function Home() {
           }}
         />
         <span>{message}</span>
+      </div>
+      <div style={{ marginTop: '1.25rem', display: 'flex', gap: '1rem' }}>
+        <Link href="/scan">Scan Card</Link>
+        <Link href="/binder">Open Binder</Link>
       </div>
     </div>
   );

@@ -7,20 +7,113 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum CollectionStatus {
+  OWNED
+  WANTED
+}
+
+enum ScanStatus {
+  QUEUED
+  PROCESSING
+  NEEDS_REVIEW
+  CONFIRMED
+  FAILED
+}
+
+enum ImportStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model Card {
-  id            Int      @id @default(autoincrement())
-  name          String
-  set           String
-  year          Int
-  player        String
-  imageUrl      String?
-  gradeEstimate  String?
-  user          User?    @relation(fields: [userId], references: [id])
-  userId        Int?
+  id                Int              @id @default(autoincrement())
+  name              String
+  set               String?
+  year              Int?
+  player            String?
+  variant           String?
+  sport             String?
+  imageUrl          String?
+  originalImageKey  String?
+  thumbnailImageKey String?
+  confidence        Float?
+  collectionStatus  CollectionStatus @default(OWNED)
+  gradeEstimate     String?
+  user              User?            @relation(fields: [userId], references: [id])
+  userId            Int?
+  scanJob           ScanJob?         @relation(fields: [scanJobId], references: [id])
+  scanJobId         Int?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 }
 
 model User {
-  id    Int     @id @default(autoincrement())
-  name  String
-  cards Card[]
+  id       Int       @id @default(autoincrement())
+  name     String
+  cards    Card[]
+  scanJobs ScanJob[]
+}
+
+model ScanJob {
+  id                Int             @id @default(autoincrement())
+  status            ScanStatus      @default(QUEUED)
+  sourceFilename    String?
+  originalImageKey  String?
+  thumbnailImageKey String?
+  ocrText           String?
+  error             String?
+  user              User?           @relation(fields: [userId], references: [id])
+  userId            Int?
+  candidates        ScanCandidate[]
+  cards             Card[]
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+}
+
+model ScanCandidate {
+  id              Int      @id @default(autoincrement())
+  scanJob         ScanJob  @relation(fields: [scanJobId], references: [id], onDelete: Cascade)
+  scanJobId       Int
+  name            String
+  set             String?
+  year            Int?
+  player          String?
+  variant         String?
+  sport           String?
+  score           Float
+  validationScore Float?
+  sourceHints     Json?
+  chosen          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+}
+
+model CardReference {
+  id            Int      @id @default(autoincrement())
+  name          String
+  set           String?
+  year          Int?
+  player        String?
+  variant       String?
+  sport         String?
+  source        String
+  normalizedKey String   @unique
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ImportJob {
+  id           Int          @id @default(autoincrement())
+  status       ImportStatus @default(QUEUED)
+  filename     String
+  totalRows    Int          @default(0)
+  createdCount Int          @default(0)
+  updatedCount Int          @default(0)
+  skippedCount Int          @default(0)
+  errorCount   Int          @default(0)
+  errors       Json?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 }

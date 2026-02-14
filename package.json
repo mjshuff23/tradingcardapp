@@ -17,6 +17,7 @@
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
     "start": "turbo run start",
+    "test:backend": "npm run test -w apps/backend",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck"
   },

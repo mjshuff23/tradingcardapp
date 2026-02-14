@@ -1,113 +1,109 @@
 # Trading Card App
 
-Local dev setup for a Next.js frontend, NestJS backend, Postgres, and Garage (S3-compatible storage).
+Monorepo for a local-first trading card scanner/catalog app (frontend + backend + infra).
+
+Stack:
+- Frontend: Next.js (Pages Router)
+- Backend: NestJS + Prisma
+- DB: Postgres
+- Object storage: Garage (S3-compatible)
+
+Roadmap from MVP to end-state is documented in `roadmap.md`.
 
 ## Prerequisites
-- Node.js 20+ and npm
+- Node.js 20+
+- npm 11+
 - Docker + Docker Compose
 
 ## Environment
-Fill in `.env` values based on `.env.example`. App-specific env files live in `apps/backend/.env` and `apps/frontend/.env`.
+1. Copy and fill env files:
+- `.env.example` -> `.env`
+- `apps/backend/.env.example` -> `apps/backend/.env`
+- `apps/frontend/.env.example` -> `apps/frontend/.env`
 
-Garage config is rendered locally from `garage.toml.template` using `scripts/generate-garage-config.js` and written to `garage.toml` (gitignored).
+2. Garage config is generated from template:
+- Source: `garage.toml.template`
+- Generated: `garage.toml` (gitignored)
 
-## Local Services
-Start Postgres and Garage only (for local app development):
+## Common Commands
 
+### Infra only (db + garage)
 ```bash
 npm run infra:up
 ```
 
-Start the full Docker dev stack (db + garage + backend + frontend):
+### Local app dev (backend + frontend on host, infra in docker)
+```bash
+npm run dev:local
+```
 
+### Full docker dev (infra + backend + frontend)
 ```bash
 npm run dev:docker
 ```
 
-If you need a rebuild after dependency changes:
-
+### Full docker dev with rebuild
 ```bash
 npm run dev:docker:build
 ```
 
-Stop infra services:
-
+### Stop local infra
 ```bash
-npm run infra:down
+npm run stop:local
 ```
 
-Ports:
-- Postgres: `5433` (configurable via `POSTGRES_PORT`)
+### Clear stale dev cache/ownership artifacts
+```bash
+npm run clean:dev-cache
+```
+
+## Service Ports
+- Frontend: `3000`
+- Backend: `3001`
+- Postgres (host): `5433`
 - Garage S3 API: `3900`
 - Garage RPC: `3901`
 - Garage Web: `3902`
 - Garage Admin API: `3903`
 
-If you rotate Garage tokens, update `.env` and restart the Garage container so the config is re-rendered.
+## API Summary (MVP)
+Base URL: `http://localhost:3001/api/v1`
 
-## Install Dependencies
-From the repo root:
+- `POST /scans` (multipart image upload)
+- `GET /scans/:scanId`
+- `POST /scans/:scanId/confirm`
+- `GET /cards`
+- `GET /cards/:cardId`
+- `PATCH /cards/:cardId`
+- `POST /import/cards/csv` (multipart CSV upload)
 
-```bash
-npm install
-```
+Health endpoint stays outside prefix:
+- `GET http://localhost:3001/health`
 
-## Run Apps
-Run local apps against Docker infra:
-
-```bash
-npm run dev:local
-```
-
-Run both apps via Turbo:
-
-```bash
-npm run dev
-```
-
-Or run apps individually:
-
-```bash
-npm run dev -w apps/backend
-npm run dev -w apps/frontend
-```
-
-Or run both apps with live reload in Docker:
-
-```bash
-npm run dev:docker
-```
-
-If you previously ran frontend in Docker and then local `next dev` fails with Turbopack permission errors, clear caches once:
-
-```bash
-npm run clean:dev-cache
-```
+Swagger docs:
+- `GET http://localhost:3001/api/docs`
 
 ## Prisma
-Generate the client:
+From repo root:
 
 ```bash
-npx prisma generate -w apps/backend
+npm exec -w apps/backend prisma generate
+npm exec -w apps/backend prisma migrate dev
 ```
 
-If you want to create the initial schema in your local database, use either:
+## Tests
+Backend unit tests:
 
 ```bash
-npx prisma migrate dev -w apps/backend
+npm run test -w apps/backend
 ```
 
-or
+Typecheck both apps:
 
 ```bash
-npx prisma db push -w apps/backend
+npm run typecheck
 ```
 
-## Garage Buckets
-Garage does not auto-create buckets. You can create one locally with:
-
-```bash
-npm run garage:bucket
-```
-
-This script creates a bucket and key via the Garage CLI inside the container and updates local `.env` files with the new credentials.
+## Notes
+- Scan OCR service is an MVP baseline abstraction and can be swapped for a stronger OCR engine later without changing API contracts.
+- Validation hints are currently generated automatically for eBay sold and PSA lookup URLs and surfaced in scan review.

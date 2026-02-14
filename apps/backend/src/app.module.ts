@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { PrismaService } from './prisma/prisma.service';
 import { HealthController } from './health/health.controller';
+import { PrismaModule } from './prisma/prisma.module';
+import { ScanModule } from './scan/scan.module';
+import { CatalogModule } from './catalog/catalog.module';
+import { ImportModule } from './import/import.module';
 
 @Module({
   imports: [
@@ -13,9 +16,11 @@ import { HealthController } from './health/health.controller';
         `.env.${process.env.NODE_ENV || 'development'}`,
       ],
     }),
+    PrismaModule,
+    ScanModule,
+    CatalogModule,
+    ImportModule,
   ],
   controllers: [HealthController],
-  providers: [PrismaService],
-  exports: [PrismaService],
 })
 export class AppModule {}

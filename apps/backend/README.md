@@ -1,14 +1,64 @@
 # Backend (NestJS + Prisma)
 
-This service is a NestJS API using Prisma for database access.
+Backend API for scan jobs, catalog, and CSV imports.
 
-## Structure
-- `src/main.ts`: App bootstrap.
-- `src/app.module.ts`: Global config + providers.
-- `src/prisma/prisma.service.ts`: PrismaClient wrapper (injectable).
-- `src/health/health.controller.ts`: `GET /health` endpoint.
-- `prisma/schema.prisma`: Data model and datasource URL.
-- `prisma/migrations/`: Migration history.
+## Modules
+- `src/health/*`: `GET /health`
+- `src/scan/*`: upload scan image, process candidates, confirm card
+- `src/catalog/*`: list/get/update cards
+- `src/import/*`: CSV card import
+- `src/storage/*`: Garage S3-compatible upload and thumbnail storage
+- `src/ocr/*`: OCR abstraction layer
+- `src/validation/*`: automatic validation hints (eBay sold + PSA)
+- `src/prisma/*`: Prisma service/module
+
+## API Base
+Global prefix: `/api/v1` (except `/health`)
+
+Swagger UI:
+- `GET /api/docs`
+
+### Scan endpoints
+- `POST /api/v1/scans` (multipart field: `image`)
+- `GET /api/v1/scans/:scanId`
+- `POST /api/v1/scans/:scanId/confirm`
+
+### Catalog endpoints
+- `GET /api/v1/cards?q=&collectionStatus=OWNED|WANTED&page=1&pageSize=25`
+- `GET /api/v1/cards/:cardId`
+- `PATCH /api/v1/cards/:cardId`
+
+### Import endpoint
+- `POST /api/v1/import/cards/csv` (multipart field: `file`)
+
+CSV columns accepted:
+- `name` or `card` (required)
+- `set`
+- `year`
+- `player`
+- `variant`
+- `sport`
+- `collectionStatus` (`OWNED` or `WANTED`)
+- `gradeEstimate`
+
+## Data Model
+Prisma entities now include:
+- `Card` (+ collection status, confidence, scan linkage, image keys)
+- `ScanJob`
+- `ScanCandidate`
+- `CardReference`
+- `ImportJob`
+
+Enums:
+- `CollectionStatus`: `OWNED | WANTED`
+- `ScanStatus`: `QUEUED | PROCESSING | NEEDS_REVIEW | CONFIRMED | FAILED`
+- `ImportStatus`: `QUEUED | PROCESSING | COMPLETED | FAILED`
+
+## Reference Dataset
+Seed file:
+- `apps/backend/data/card-references.csv`
+
+On startup/first scan, references are loaded into `CardReference` when table is empty.
 
 ## Environment
 Loaded by `@nestjs/config` from:
@@ -16,10 +66,11 @@ Loaded by `@nestjs/config` from:
 - `.env.local`
 - `.env.{NODE_ENV}`
 
-Required variables (see `.env.example`):
-- `DATABASE_URL` (Postgres connection string)
+Key variables:
 - `PORT` (default `3001`)
-- `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION` (Garage S3-compatible storage)
+- `DATABASE_URL`
+- `CORS_ORIGIN`
+- `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION`
 
 ## Run
 From repo root:
@@ -28,45 +79,33 @@ From repo root:
 npm run dev -w apps/backend
 ```
 
-Health check:
-```
-http://localhost:3001/health
-```
-
-## Prisma Basics
-
-### Generate Client
+## Quick Manual Test
+1. Start infra:
 ```bash
-npx prisma generate
+npm run infra:up
 ```
-
-### Create Migrations (recommended)
-Tracks schema changes for production use.
-
+2. Run backend:
 ```bash
-npx prisma migrate dev --name init
+npm run dev -w apps/backend
 ```
-
-### Push Schema (no migrations)
-Useful for quick prototyping.
-
+3. Open docs:
+- `http://localhost:3001/api/docs`
+4. Verify health:
 ```bash
-npx prisma db push
+curl http://localhost:3001/health
 ```
 
-### Validate Schema
+## Prisma
 ```bash
-npx prisma validate
+npm exec -w apps/backend prisma generate
+npm exec -w apps/backend prisma migrate dev
 ```
 
-### Open Prisma Studio
+## Tests
 ```bash
-npx prisma studio
+npm run test -w apps/backend
+npm run typecheck -w apps/backend
 ```
 
-## Why PrismaService?
-`PrismaService` extends `PrismaClient` and integrates with NestJS lifecycle hooks so connections open and close cleanly. Import it in other modules to access the database via DI.
-
-## Common Issues
-- **Port 5432 already in use**: This repo uses Postgres on `5433`. Check `.env` and `docker-compose.yml`.
-- **Prisma schema warning in VS Code**: Pin the Prisma extension to Prisma 6 and set schema path to `apps/backend/prisma/schema.prisma`.
+## Current MVP Caveat
+`OcrService` is intentionally a replaceable MVP abstraction. It currently uses lightweight extraction logic so the pipeline is stable locally; swap the implementation later for Tesseract/vision models without changing endpoint contracts.
