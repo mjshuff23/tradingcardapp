@@ -9,12 +9,13 @@ Local dev setup for a Next.js frontend, NestJS backend, Postgres, and Garage (S3
 ## Environment
 Fill in `.env` values based on `.env.example`. App-specific env files live in `apps/backend/.env` and `apps/frontend/.env`.
 
-Garage secrets are sourced from env vars and injected into `garage.toml` at container startup via `envsubst` (see `garage.toml.template`).
+Garage config is rendered locally from `garage.toml.template` using `scripts/generate-garage-config.js` and written to `garage.toml` (gitignored).
 
 ## Local Services
 Start Postgres and Garage:
 
 ```bash
+npm run garage:config
 docker compose up -d
 ```
 
@@ -68,4 +69,10 @@ npx prisma db push -w apps/backend
 ```
 
 ## Garage Buckets
-Garage does not auto-create buckets. Create a bucket and access keys using the Garage admin API or CLI, then update `S3_ACCESS_KEY`, `S3_SECRET_KEY`, and `S3_BUCKET` in your `.env` files.
+Garage does not auto-create buckets. You can create one locally with:
+
+```bash
+npm run garage:bucket
+```
+
+This script creates a bucket and key via the Garage CLI inside the container and updates local `.env` files with the new credentials.

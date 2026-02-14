@@ -1,6 +1,6 @@
 #!/bin/bash
+# This script generates a dump of the project structure and file contents, excluding certain patterns.
 
-# Added *.txt and project-dump.txt to the ignore list
 IGNORE_PATTERN="node_modules|\.git|dist|build|package-lock\.json|yarn\.lock|project-dump\.txt|.*\.txt"
 
 OUTPUT_FILE="project-dump.txt"

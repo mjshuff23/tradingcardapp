@@ -12,6 +12,7 @@ out/
 .env.*
 !.env.example
 !.env.*.example
+garage.toml
 
 # Tooling caches
 .eslintcache

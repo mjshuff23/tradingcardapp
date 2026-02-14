@@ -4,6 +4,8 @@
   "private": true,
   "description": "",
   "scripts": {
+    "garage:config": "node scripts/generate-garage-config.js",
+    "garage:bucket": "bash scripts/garage-bucket.sh",
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
     "start": "turbo run start",

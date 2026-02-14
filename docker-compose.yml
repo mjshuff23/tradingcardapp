@@ -1,10 +1,9 @@
-version: '3.8'
 services:
   db:
     image: postgres:16
     restart: unless-stopped
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-tradingcarddb}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -28,17 +27,16 @@ services:
     volumes:
       - garage_meta:/var/lib/garage/meta
       - garage_data:/var/lib/garage/data
-      - ./garage.toml.template:/etc/garage.toml.template:ro
+      - ./garage.toml:/etc/garage.toml:ro
     environment:
       - RUST_LOG=info
-      - GARAGE_RPC_SECRET=${GARAGE_RPC_SECRET}
-      - GARAGE_ADMIN_TOKEN=${GARAGE_ADMIN_TOKEN}
-      - GARAGE_METRICS_TOKEN=${GARAGE_METRICS_TOKEN}
-    command: >
-      /bin/sh -c "
-      envsubst < /etc/garage.toml.template > /etc/garage.toml &&
-      garage server -c /etc/garage.toml
-      "
+      - GARAGE_CONFIG_FILE=/etc/garage.toml
+    command: ["/garage", "server"]
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
