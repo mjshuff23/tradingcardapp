@@ -12,11 +12,28 @@ Fill in `.env` values based on `.env.example`. App-specific env files live in `a
 Garage config is rendered locally from `garage.toml.template` using `scripts/generate-garage-config.js` and written to `garage.toml` (gitignored).
 
 ## Local Services
-Start Postgres and Garage:
+Start Postgres and Garage only (for local app development):
 
 ```bash
-npm run garage:config
-docker compose up -d
+npm run infra:up
+```
+
+Start the full Docker dev stack (db + garage + backend + frontend):
+
+```bash
+npm run dev:docker
+```
+
+If you need a rebuild after dependency changes:
+
+```bash
+npm run dev:docker:build
+```
+
+Stop infra services:
+
+```bash
+npm run infra:down
 ```
 
 Ports:
@@ -36,6 +53,12 @@ npm install
 ```
 
 ## Run Apps
+Run local apps against Docker infra:
+
+```bash
+npm run dev:local
+```
+
 Run both apps via Turbo:
 
 ```bash
@@ -47,6 +70,18 @@ Or run apps individually:
 ```bash
 npm run dev -w apps/backend
 npm run dev -w apps/frontend
+```
+
+Or run both apps with live reload in Docker:
+
+```bash
+npm run dev:docker
+```
+
+If you previously ran frontend in Docker and then local `next dev` fails with Turbopack permission errors, clear caches once:
+
+```bash
+npm run clean:dev-cache
 ```
 
 ## Prisma

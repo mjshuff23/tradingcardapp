@@ -5,19 +5,45 @@ IGNORE_PATTERN="node_modules|\.git|dist|build|package-lock\.json|yarn\.lock|proj
 
 OUTPUT_FILE="project-dump.txt"
 
+FILE_LIST=$(git ls-files -co --exclude-standard 2>/dev/null)
+
 {
     echo "--- PROJECT STRUCTURE ---"
-    tree -I "$IGNORE_PATTERN"
+    if command -v tree >/dev/null 2>&1; then
+        if [ -n "$FILE_LIST" ]; then
+            printf "%s\n" "$FILE_LIST" | tree --fromfile
+        else
+            tree -I "$IGNORE_PATTERN"
+        fi
+    else
+        if [ -n "$FILE_LIST" ]; then
+            printf "%s\n" "$FILE_LIST"
+        else
+            find . -type f | grep -vE "$IGNORE_PATTERN"
+        fi
+    fi
 
     echo -e "\n--- FILE CONTENTS ---"
 
-    find . -type f | grep -vE "$IGNORE_PATTERN" | while read -r file; do
-        echo "========================================"
-        echo "FILE: $file"
-        echo "========================================"
-        cat "$file"
-        echo -e "\n"
-    done
+    if [ -n "$FILE_LIST" ]; then
+        printf "%s\n" "$FILE_LIST" | while read -r file; do
+            if [ -f "$file" ]; then
+                echo "========================================"
+                echo "FILE: $file"
+                echo "========================================"
+                cat "$file"
+                echo -e "\n"
+            fi
+        done
+    else
+        find . -type f | grep -vE "$IGNORE_PATTERN" | while read -r file; do
+            echo "========================================"
+            echo "FILE: $file"
+            echo "========================================"
+            cat "$file"
+            echo -e "\n"
+        done
+    fi
 } > "$OUTPUT_FILE"
 
 echo "Wrote project dump to $OUTPUT_FILE"

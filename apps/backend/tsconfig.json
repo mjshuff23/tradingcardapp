@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "module": "esnext",
+    "module": "commonjs",
     "declaration": true,
     "removeComments": true,
     "emitDecoratorMetadata": true,
@@ -10,8 +10,8 @@
     "sourceMap": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "baseUrl": "./",
-    "ignoreDeprecations": "6.0",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": false,
