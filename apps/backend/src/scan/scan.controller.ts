@@ -5,11 +5,14 @@ import {
   Param,
   ParseIntPipe,
   Post,
-  UploadedFile,
+  Res,
+  UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
+import { UploadedFileFields } from '../common/uploaded-file.type';
 import { ConfirmScanDto } from './dto/confirm-scan.dto';
 import { ScanService } from './scan.service';
 
@@ -26,19 +29,45 @@ export class ScanController {
       type: 'object',
       properties: {
         image: { type: 'string', format: 'binary' },
+        backImage: { type: 'string', format: 'binary' },
       },
       required: ['image'],
     },
   })
-  @UseInterceptors(FileInterceptor('image'))
-  async createScan(@UploadedFile() file: Express.Multer.File) {
-    return this.scanService.createScan(file);
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'image', maxCount: 1 },
+      { name: 'backImage', maxCount: 1 },
+    ]),
+  )
+  async createScan(@UploadedFiles() files: UploadedFileFields) {
+    return this.scanService.createScan({
+      frontFile: files.image?.[0],
+      backFile: files.backImage?.[0],
+    });
   }
 
   @Get(':scanId')
   @ApiOperation({ summary: 'Get scan job status and candidates' })
   async getScan(@Param('scanId', ParseIntPipe) scanId: number) {
     return this.scanService.getScan(scanId);
+  }
+
+  @Get(':scanId/image/:side')
+  @ApiOperation({ summary: 'Get uploaded scan image (front/back)' })
+  async getScanImage(
+    @Param('scanId', ParseIntPipe) scanId: number,
+    @Param('side') side: string,
+    @Res() res: Response,
+  ) {
+    if (side !== 'front' && side !== 'back') {
+      res.status(400).json({ message: 'side must be "front" or "back".' });
+      return;
+    }
+
+    const image = await this.scanService.getScanImage(scanId, side);
+    res.setHeader('Content-Type', image.contentType);
+    res.send(image.buffer);
   }
 
   @Post(':scanId/confirm')

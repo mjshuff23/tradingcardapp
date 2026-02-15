@@ -69,7 +69,7 @@ npm run clean:dev-cache
 ## API Summary (MVP)
 Base URL: `http://localhost:3001/api/v1`
 
-- `POST /scans` (multipart image upload)
+- `POST /scans` (multipart upload: `image` required, `backImage` optional)
 - `GET /scans/:scanId`
 - `POST /scans/:scanId/confirm`
 - `GET /cards`
@@ -105,5 +105,9 @@ npm run typecheck
 ```
 
 ## Notes
-- Scan OCR service is an MVP baseline abstraction and can be swapped for a stronger OCR engine later without changing API contracts.
+- OCR defaults to `tesseract` in backend (`OCR_PROVIDER=tesseract`) with fallback mode available via `OCR_PROVIDER=stub`.
+- Reverse lookup defaults to `duckduckgo` only (`LOOKUP_PROVIDERS=duckduckgo`) to avoid paid cloud usage.
+- Scan upload supports `image` (front, required) and `backImage` (optional but recommended).
+- Matching now uses weighted scoring with structured OCR hints (`year`, `card number`, `brand`) when available.
+- CSV import supports `imageUrl`/`image_url` to fetch card images and store them in Garage/S3.
 - Validation hints are currently generated automatically for eBay sold and PSA lookup URLs and surfaced in scan review.

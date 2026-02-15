@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { CollectionStatus } from '@prisma/client';
 import { parseCsv } from '../common/csv.util';
+import { UploadedFile } from '../common/uploaded-file.type';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 
 type ImportError = {
   row: number;
@@ -10,9 +12,12 @@ type ImportError = {
 
 @Injectable()
 export class ImportService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storageService: StorageService,
+  ) {}
 
-  async importCardsCsv(file: Express.Multer.File) {
+  async importCardsCsv(file: UploadedFile) {
     if (!file || !file.buffer) {
       throw new BadRequestException('CSV file is required.');
     }
@@ -46,10 +51,15 @@ export class ImportService {
       const variant = row.variant?.trim() || null;
       const sport = row.sport?.trim() || null;
       const year = row.year ? Number(row.year) || null : null;
+      const importImageUrl = row.imageUrl?.trim() || row.image_url?.trim() || null;
       const collectionStatus =
         row.collectionStatus === 'WANTED' ? CollectionStatus.WANTED : CollectionStatus.OWNED;
 
       try {
+        const importedImage = importImageUrl
+          ? await this.importImageFromUrl(importImageUrl)
+          : null;
+
         const existing = await this.prisma.card.findFirst({
           where: {
             name: name.trim(),
@@ -67,6 +77,9 @@ export class ImportService {
             data: {
               collectionStatus,
               gradeEstimate: row.gradeEstimate || existing.gradeEstimate,
+              imageUrl: importedImage?.thumbnailKey ?? existing.imageUrl,
+              originalImageKey: importedImage?.originalKey ?? existing.originalImageKey,
+              thumbnailImageKey: importedImage?.thumbnailKey ?? existing.thumbnailImageKey,
             },
           });
           updatedCount += 1;
@@ -81,6 +94,9 @@ export class ImportService {
               sport,
               collectionStatus,
               gradeEstimate: row.gradeEstimate || null,
+              imageUrl: importedImage?.thumbnailKey ?? null,
+              originalImageKey: importedImage?.originalKey ?? null,
+              thumbnailImageKey: importedImage?.thumbnailKey ?? null,
             },
           });
           createdCount += 1;
@@ -119,5 +135,62 @@ export class ImportService {
         errorCount,
       },
     };
+  }
+
+  private async importImageFromUrl(imageUrl: string) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetch(imageUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36',
+        },
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const contentType = response.headers.get('content-type') ?? '';
+      if (!contentType.startsWith('image/')) {
+        return null;
+      }
+
+      const bytes = await response.arrayBuffer();
+      if (!bytes.byteLength || bytes.byteLength > 10 * 1024 * 1024) {
+        return null;
+      }
+
+      const derivedFilename = this.filenameFromUrl(imageUrl, contentType);
+      return this.storageService.uploadScanImage(Buffer.from(bytes), derivedFilename);
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private filenameFromUrl(imageUrl: string, contentType: string): string {
+    try {
+      const url = new URL(imageUrl);
+      const pathname = url.pathname.split('/').filter(Boolean);
+      const basename = pathname[pathname.length - 1] || 'import-image';
+      if (basename.includes('.')) {
+        return basename;
+      }
+    } catch {
+      // fall through
+    }
+
+    if (contentType.includes('png')) {
+      return 'import-image.png';
+    }
+    if (contentType.includes('webp')) {
+      return 'import-image.webp';
+    }
+    return 'import-image.jpg';
   }
 }

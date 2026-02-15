@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -9,6 +9,11 @@ import sharp from 'sharp';
 export type StoredImage = {
   originalKey: string;
   thumbnailKey: string;
+};
+
+export type StoredImageContent = {
+  buffer: Buffer;
+  contentType: string;
 };
 
 @Injectable()
@@ -68,9 +73,45 @@ export class StorageService {
 
       return { originalKey, thumbnailKey };
     } catch (error) {
-      this.logger.warn('Falling back to local image storage because S3 upload failed.');
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Falling back to local image storage because S3 upload failed: ${message}`);
       return this.writeLocally(id, extension, buffer, thumbnailBuffer);
     }
+  }
+
+  async readImage(key: string): Promise<StoredImageContent> {
+    if (!key) {
+      throw new Error('Image key is required.');
+    }
+
+    if (key.startsWith('local/')) {
+      const localRoot = path.resolve(process.cwd(), '.local-storage');
+      const relativePath = key.replace(/^local\//, '');
+      const filePath = path.join(localRoot, relativePath);
+      const buffer = await fs.readFile(filePath);
+      const extension = path.extname(filePath).replace('.', '').toLowerCase();
+      return {
+        buffer,
+        contentType: this.detectMimeType(extension),
+      };
+    }
+
+    const response = await this.s3Client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }),
+    );
+
+    if (!response.Body) {
+      throw new Error('Image object not found.');
+    }
+
+    const bytes = await response.Body.transformToByteArray();
+    return {
+      buffer: Buffer.from(bytes),
+      contentType: response.ContentType ?? 'application/octet-stream',
+    };
   }
 
   private getExtension(sourceFilename: string): string {

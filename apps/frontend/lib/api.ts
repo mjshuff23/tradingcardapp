@@ -2,10 +2,12 @@ export type ScanStatus = 'QUEUED' | 'PROCESSING' | 'NEEDS_REVIEW' | 'CONFIRMED' 
 export type CollectionStatus = 'OWNED' | 'WANTED';
 
 export type ValidationHint = {
-  source: 'ebay_sold' | 'psa';
+  source: 'ebay_sold' | 'psa' | 'web_lookup';
+  provider?: string;
   url: string;
   title: string;
   score: number;
+  imageUrl?: string;
 };
 
 export type ScanCandidate = {
@@ -28,6 +30,8 @@ export type ScanResponse = {
   sourceFilename: string | null;
   ocrText: string | null;
   error: string | null;
+  frontImageUrl: string | null;
+  backImageUrl: string | null;
   candidates: ScanCandidate[];
 };
 
@@ -44,9 +48,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function uploadScan(image: File): Promise<{ scanId: number; status: ScanStatus }> {
+export async function uploadScan(input: {
+  image: File;
+  backImage?: File | null;
+}): Promise<{ scanId: number; status: ScanStatus }> {
   const form = new FormData();
-  form.append('image', image);
+  form.append('image', input.image);
+  if (input.backImage) {
+    form.append('backImage', input.backImage);
+  }
 
   return request('/scans', {
     method: 'POST',

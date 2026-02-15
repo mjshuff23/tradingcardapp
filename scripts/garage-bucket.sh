@@ -52,12 +52,9 @@ ensure_layout() {
   fi
 }
 
-generate_key() {
-  node -e "console.log(require('crypto').randomBytes(16).toString('hex'))"
-}
-
-generate_secret() {
-  node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+is_valid_garage_key() {
+  local key="$1"
+  [[ "$key" =~ ^GK[0-9a-fA-F]{24}$ ]]
 }
 
 escape_sed() {
@@ -88,24 +85,34 @@ ensure_layout
 ACCESS_KEY="${S3_ACCESS_KEY:-}"
 SECRET_KEY="${S3_SECRET_KEY:-}"
 
-if [ -z "$ACCESS_KEY" ] || [ -z "$SECRET_KEY" ] || [ "$ACCESS_KEY" = "tradingcards" ] || [ "$SECRET_KEY" = "tradingcardssecret" ] || [ "$ACCESS_KEY" = "change-me" ] || [ "$SECRET_KEY" = "change-me" ]; then
-  ACCESS_KEY="$(generate_key)"
-  SECRET_KEY="$(generate_secret)"
+if ! is_valid_garage_key "$ACCESS_KEY" || [ -z "$SECRET_KEY" ] || [ "$ACCESS_KEY" = "change-me" ] || [ "$SECRET_KEY" = "change-me" ]; then
+  echo "Creating Garage access key..."
+  KEY_OUTPUT="$(garage key create "$KEY_NAME" | strip_ansi)"
+  ACCESS_KEY="$(echo "$KEY_OUTPUT" | awk -F': *' '/^Key ID:/ {print $2; exit}' | xargs)"
+  SECRET_KEY="$(echo "$KEY_OUTPUT" | awk -F': *' '/^Secret key:/ {print $2; exit}' | xargs)"
+
+  if [ -z "$ACCESS_KEY" ] || [ -z "$SECRET_KEY" ]; then
+    echo "Failed to parse Garage key credentials."
+    exit 1
+  fi
+else
+  set +e
+  garage key info "$ACCESS_KEY" >/dev/null 2>&1
+  KEY_EXISTS_STATUS=$?
+  set -e
+
+  if [ $KEY_EXISTS_STATUS -ne 0 ]; then
+    echo "Existing S3_ACCESS_KEY is invalid in Garage. Creating a new key..."
+    KEY_OUTPUT="$(garage key create "$KEY_NAME" | strip_ansi)"
+    ACCESS_KEY="$(echo "$KEY_OUTPUT" | awk -F': *' '/^Key ID:/ {print $2; exit}' | xargs)"
+    SECRET_KEY="$(echo "$KEY_OUTPUT" | awk -F': *' '/^Secret key:/ {print $2; exit}' | xargs)"
+  fi
 fi
 
 set +e
-
-garage key import --yes -n "$KEY_NAME" "$ACCESS_KEY" "$SECRET_KEY"
-IMPORT_KEY_STATUS=$?
-
 garage bucket create "$BUCKET_NAME"
 CREATE_BUCKET_STATUS=$?
-
 set -e
-
-if [ $IMPORT_KEY_STATUS -ne 0 ]; then
-  echo "Key may already exist. Continuing..."
-fi
 
 if [ $CREATE_BUCKET_STATUS -ne 0 ]; then
   echo "Bucket may already exist. Continuing..."

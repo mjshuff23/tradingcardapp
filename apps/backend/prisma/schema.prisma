@@ -62,6 +62,9 @@ model ScanJob {
   sourceFilename    String?
   originalImageKey  String?
   thumbnailImageKey String?
+  backSourceFilename String?
+  backOriginalImageKey String?
+  backThumbnailImageKey String?
   ocrText           String?
   error             String?
   user              User?           @relation(fields: [userId], references: [id])
@@ -87,21 +90,6 @@ model ScanCandidate {
   sourceHints     Json?
   chosen          Boolean  @default(false)
   createdAt       DateTime @default(now())
-}
-
-model CardReference {
-  id            Int      @id @default(autoincrement())
-  name          String
-  set           String?
-  year          Int?
-  player        String?
-  variant       String?
-  sport         String?
-  source        String
-  normalizedKey String   @unique
-  metadata      Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
 }
 
 model ImportJob {

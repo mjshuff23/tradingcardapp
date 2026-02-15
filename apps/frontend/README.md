@@ -4,7 +4,7 @@ Web client for scan upload/review and binder management.
 
 ## Pages
 - `/` home + backend health indicator
-- `/scan` upload/camera capture flow
+- `/scan` front image upload/camera capture + optional back image upload
 - `/review/[scanId]` scan status, candidate review, confirmation
 - `/binder` search/filter catalog and CSV import
 

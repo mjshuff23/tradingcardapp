@@ -19,7 +19,7 @@ Swagger UI:
 - `GET /api/docs`
 
 ### Scan endpoints
-- `POST /api/v1/scans` (multipart field: `image`)
+- `POST /api/v1/scans` (multipart fields: `image` required, `backImage` optional)
 - `GET /api/v1/scans/:scanId`
 - `POST /api/v1/scans/:scanId/confirm`
 
@@ -40,13 +40,13 @@ CSV columns accepted:
 - `sport`
 - `collectionStatus` (`OWNED` or `WANTED`)
 - `gradeEstimate`
+- `imageUrl` or `image_url` (optional: remote image is downloaded and stored in Garage/S3)
 
 ## Data Model
 Prisma entities now include:
 - `Card` (+ collection status, confidence, scan linkage, image keys)
 - `ScanJob`
 - `ScanCandidate`
-- `CardReference`
 - `ImportJob`
 
 Enums:
@@ -54,11 +54,11 @@ Enums:
 - `ScanStatus`: `QUEUED | PROCESSING | NEEDS_REVIEW | CONFIRMED | FAILED`
 - `ImportStatus`: `QUEUED | PROCESSING | COMPLETED | FAILED`
 
-## Reference Dataset
-Seed file:
-- `apps/backend/data/card-references.csv`
-
-On startup/first scan, references are loaded into `CardReference` when table is empty.
+## Matching Inputs
+Scan ranking uses:
+- OCR text (front + optional back)
+- web lookup hints (DuckDuckGo by default)
+- existing `Card` rows as a growing local reference set
 
 ## Environment
 Loaded by `@nestjs/config` from:
@@ -70,6 +70,10 @@ Key variables:
 - `PORT` (default `3001`)
 - `DATABASE_URL`
 - `CORS_ORIGIN`
+- `OCR_PROVIDER` (`tesseract` or `stub`)
+- `OCR_LANG` (default `eng`)
+- `OCR_DEBUG` (`true` to log OCR worker progress)
+- `LOOKUP_PROVIDERS` (default `duckduckgo`; add `google_vision` only if you want cloud reverse image lookup)
 - `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION`
 
 ## Run
@@ -108,4 +112,10 @@ npm run typecheck -w apps/backend
 ```
 
 ## Current MVP Caveat
-`OcrService` is intentionally a replaceable MVP abstraction. It currently uses lightweight extraction logic so the pipeline is stable locally; swap the implementation later for Tesseract/vision models without changing endpoint contracts.
+`OcrService` is intentionally replaceable. It now uses Tesseract with light image preprocessing and falls back to filename-based text if OCR fails. You can force fallback mode with `OCR_PROVIDER=stub`.
+
+Current OCR/matching behavior:
+- OCR runs multi-pass (multiple preprocessing variants + region crops).
+- When a back image is provided, extracted back text is prioritized for structured hints.
+- Structured hints extracted: `year`, `card number`, `brand`.
+- Candidate scoring is weighted using token overlap + fuzzy similarity + structured hint bonuses.

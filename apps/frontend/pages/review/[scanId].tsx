@@ -3,6 +3,20 @@ import { useRouter } from 'next/router';
 import { useEffect, useMemo, useState } from 'react';
 import { confirmScan, getScan, ScanResponse } from '../../lib/api';
 
+const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+function toAbsoluteApiUrl(url: string | null | undefined): string | null {
+  if (!url) {
+    return null;
+  }
+
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+
+  return `${API_ORIGIN}${url}`;
+}
+
 export default function ReviewScanPage() {
   const router = useRouter();
   const scanId = useMemo(() => {
@@ -105,6 +119,49 @@ export default function ReviewScanPage() {
 
           {scan.status === 'PROCESSING' || scan.status === 'QUEUED' ? <p>Processing scan...</p> : null}
 
+          {(scan.frontImageUrl || scan.backImageUrl) ? (
+            <section
+              style={{
+                display: 'grid',
+                gap: '1rem',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                alignItems: 'start',
+              }}
+            >
+              {scan.frontImageUrl ? (
+                <div>
+                  <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Uploaded Front</p>
+                  <img
+                    src={toAbsoluteApiUrl(scan.frontImageUrl) ?? undefined}
+                    alt="Uploaded front"
+                    style={{
+                      width: '100%',
+                      maxWidth: '320px',
+                      borderRadius: '0.5rem',
+                      border: '1px solid #ddd',
+                    }}
+                  />
+                </div>
+              ) : null}
+
+              {scan.backImageUrl ? (
+                <div>
+                  <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Uploaded Back</p>
+                  <img
+                    src={toAbsoluteApiUrl(scan.backImageUrl) ?? undefined}
+                    alt="Uploaded back"
+                    style={{
+                      width: '100%',
+                      maxWidth: '320px',
+                      borderRadius: '0.5rem',
+                      border: '1px solid #ddd',
+                    }}
+                  />
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
           {scan.candidates.length > 0 ? (
             <div>
               <h2>Candidates</h2>
@@ -113,14 +170,19 @@ export default function ReviewScanPage() {
                   <tr>
                     <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Pick</th>
                     <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Card</th>
+                    <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Preview</th>
                     <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Score</th>
                     <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Validation</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {scan.candidates.map((candidate) => (
+                  {scan.candidates.map((candidate) => {
+                    const previewImageUrl =
+                      candidate.sourceHints?.find((hint) => hint.imageUrl)?.imageUrl ?? null;
+
+                    return (
                     <tr key={candidate.id}>
-                      <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem' }}>
+                      <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem', verticalAlign: 'top' }}>
                         <input
                           type="radio"
                           name="candidate"
@@ -128,22 +190,40 @@ export default function ReviewScanPage() {
                           onChange={() => setSelectedCandidateId(candidate.id)}
                         />
                       </td>
-                      <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem' }}>
+                      <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem', verticalAlign: 'top' }}>
                         {candidate.year ? `${candidate.year} ` : ''}
                         {candidate.player ? `${candidate.player} - ` : ''}
                         {candidate.name}
                         {candidate.set ? ` (${candidate.set})` : ''}
                         {candidate.variant ? ` [${candidate.variant}]` : ''}
                       </td>
-                      <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem' }}>
+                      <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem', verticalAlign: 'top' }}>
+                        {previewImageUrl ? (
+                          <img
+                            src={previewImageUrl}
+                            alt={`${candidate.name} preview`}
+                            style={{
+                              width: '110px',
+                              height: '150px',
+                              objectFit: 'cover',
+                              borderRadius: '0.5rem',
+                              border: '1px solid #ddd',
+                              background: '#f3f4f6',
+                            }}
+                          />
+                        ) : (
+                          <span style={{ color: '#6b7280' }}>No preview</span>
+                        )}
+                      </td>
+                      <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem', verticalAlign: 'top' }}>
                         {candidate.score.toFixed(3)}
                       </td>
-                      <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem' }}>
+                      <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem', verticalAlign: 'top' }}>
                         {candidate.validationScore?.toFixed(3) ?? 'n/a'}
                         {candidate.sourceHints?.length ? (
                           <ul>
                             {candidate.sourceHints.map((hint) => (
-                              <li key={`${candidate.id}-${hint.source}`}>
+                              <li key={`${candidate.id}-${hint.source}-${hint.url}`}>
                                 <a href={hint.url} target="_blank" rel="noreferrer">
                                   {hint.title}
                                 </a>
@@ -153,7 +233,7 @@ export default function ReviewScanPage() {
                         ) : null}
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
 

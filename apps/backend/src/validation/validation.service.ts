@@ -1,12 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { tokenize, overlapScore } from '../common/normalize.util';
-
-export type ValidationHint = {
-  source: 'ebay_sold' | 'psa';
-  url: string;
-  title: string;
-  score: number;
-};
+import { SourceHint } from '../common/source-hint.type';
 
 export type CandidateForValidation = {
   name: string;
@@ -20,7 +14,7 @@ export type CandidateForValidation = {
 export class ValidationService {
   validateCandidate(candidate: CandidateForValidation, ocrText: string): {
     validationScore: number;
-    sourceHints: ValidationHint[];
+    sourceHints: SourceHint[];
   } {
     const query = [candidate.year, candidate.player, candidate.name, candidate.set, candidate.variant]
       .filter(Boolean)
@@ -34,7 +28,7 @@ export class ValidationService {
     const candidateTokens = tokenize(normalizedQuery);
     const lexicalScore = overlapScore(ocrTokens, candidateTokens);
 
-    const hints: ValidationHint[] = [
+    const hints: SourceHint[] = [
       {
         source: 'ebay_sold',
         title: `eBay sold: ${normalizedQuery}`,

@@ -6,6 +6,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { UploadedFile as UploadedFileType } from '../common/uploaded-file.type';
 import { ImportService } from './import.service';
 
 @ApiTags('Imports')
@@ -26,7 +27,7 @@ export class ImportController {
     },
   })
   @UseInterceptors(FileInterceptor('file'))
-  async importCsv(@UploadedFile() file: Express.Multer.File) {
+  async importCsv(@UploadedFile() file: UploadedFileType) {
     return this.importService.importCardsCsv(file);
   }
 }
