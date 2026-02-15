@@ -392,7 +392,10 @@ export class ScanService {
         const yearBonus = this.computeYearBonus(reference.year, ocr.hints.years, ocrText);
         const playerBonus = this.computePlayerBonus(reference.player, ocrText, backText);
         const playerLockBonus = this.computePlayerLockBonus(reference.player, lockedPlayer);
-        const setBonus = this.computeSetBonus(reference, ocrText, backText, ocr.hints.brands);
+        const setBonus = this.computeSetBonus(reference, ocrText, backText, [
+          ...ocr.hints.brands,
+          ...ocr.hints.subsets,
+        ]);
         const numberBonus = this.computeNumberBonus(reference.metadata, ocr.hints.cardNumbers);
         const lookupBonus = this.computeLookupBonus(searchable, lookupCorpus);
 
@@ -498,7 +501,7 @@ export class ScanService {
     reference: { set: string | null; source: string },
     ocrText: string,
     backText: string,
-    brandHints: string[],
+    setHints: string[],
   ): number {
     const setNormalized = normalizeText(reference.set);
     const sourceNormalized = normalizeText(reference.source);
@@ -512,7 +515,7 @@ export class ScanService {
       bonus += 0.05;
     }
 
-    if (brandHints.some((brand) => setNormalized.includes(brand) || sourceNormalized.includes(brand))) {
+    if (setHints.some((hint) => setNormalized.includes(hint) || sourceNormalized.includes(hint))) {
       bonus += 0.06;
     }
 

@@ -35,6 +35,22 @@ export type ScanResponse = {
   candidates: ScanCandidate[];
 };
 
+export type CardRecord = {
+  id: number;
+  name: string;
+  set: string | null;
+  year: number | null;
+  player: string | null;
+  variant: string | null;
+  sport: string | null;
+  imageUrl: string | null;
+  originalImageKey: string | null;
+  thumbnailImageKey: string | null;
+  confidence: number | null;
+  collectionStatus: CollectionStatus;
+  gradeEstimate: string | null;
+};
+
 const API_BASE = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1`;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -100,15 +116,7 @@ export async function listCards(params: {
 
   const suffix = searchParams.toString();
   return request<{
-    items: Array<{
-      id: number;
-      name: string;
-      set: string | null;
-      year: number | null;
-      player: string | null;
-      collectionStatus: CollectionStatus;
-      confidence: number | null;
-    }>;
+    items: CardRecord[];
     pagination: {
       page: number;
       pageSize: number;
@@ -141,5 +149,31 @@ export async function importCardsCsv(file: File): Promise<{
   }>('/import/cards/csv', {
     method: 'POST',
     body: form,
+  });
+}
+
+export async function getCard(cardId: number): Promise<CardRecord> {
+  return request<CardRecord>(`/cards/${cardId}`);
+}
+
+export async function updateCard(
+  cardId: number,
+  payload: Partial<{
+    name: string;
+    set: string | null;
+    year: number | null;
+    player: string | null;
+    variant: string | null;
+    sport: string | null;
+    collectionStatus: CollectionStatus;
+    gradeEstimate: string | null;
+  }>,
+): Promise<CardRecord> {
+  return request<CardRecord>(`/cards/${cardId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
   });
 }

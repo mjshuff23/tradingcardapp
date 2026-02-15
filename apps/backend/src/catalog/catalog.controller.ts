@@ -6,9 +6,11 @@ import {
   ParseIntPipe,
   Patch,
   Query,
+  Res,
 } from '@nestjs/common';
 import { CollectionStatus } from '@prisma/client';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
 import { CatalogService } from './catalog.service';
 import { UpdateCardDto } from './dto/update-card.dto';
 
@@ -37,6 +39,17 @@ export class CatalogController {
   @ApiOperation({ summary: 'Get one card by ID' })
   async getCard(@Param('cardId', ParseIntPipe) cardId: number) {
     return this.catalogService.getCard(cardId);
+  }
+
+  @Get(':cardId/image')
+  @ApiOperation({ summary: 'Get card image' })
+  async getCardImage(
+    @Param('cardId', ParseIntPipe) cardId: number,
+    @Res() res: Response,
+  ) {
+    const image = await this.catalogService.getCardImage(cardId);
+    res.setHeader('Content-Type', image.contentType);
+    res.send(image.buffer);
   }
 
   @Patch(':cardId')

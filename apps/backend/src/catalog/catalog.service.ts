@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CollectionStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { UpdateCardDto } from './dto/update-card.dto';
 
 @Injectable()
 export class CatalogService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storageService: StorageService,
+  ) {}
 
   async listCards(params: {
     q?: string;
@@ -68,5 +72,52 @@ export class CatalogService {
       where: { id: cardId },
       data: dto,
     });
+  }
+
+  async getCardImage(
+    cardId: number,
+  ): Promise<{ buffer: Buffer; contentType: string }> {
+    const card = await this.getCard(cardId);
+    const key = card.thumbnailImageKey ?? card.originalImageKey ?? card.imageUrl;
+
+    if (!key) {
+      throw new NotFoundException('Card image not found.');
+    }
+
+    if (key.startsWith('http://') || key.startsWith('https://')) {
+      return this.fetchExternalImage(key);
+    }
+
+    return this.storageService.readImage(key);
+  }
+
+  private async fetchExternalImage(url: string): Promise<{ buffer: Buffer; contentType: string }> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36',
+        },
+      });
+
+      if (!response.ok) {
+        throw new NotFoundException('Card image fetch failed.');
+      }
+
+      const contentType = response.headers.get('content-type') ?? 'image/jpeg';
+      const bytes = await response.arrayBuffer();
+      return {
+        buffer: Buffer.from(bytes),
+        contentType,
+      };
+    } catch {
+      throw new NotFoundException('Card image not reachable.');
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 }

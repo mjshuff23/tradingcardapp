@@ -17,6 +17,14 @@ function toAbsoluteApiUrl(url: string | null | undefined): string | null {
   return `${API_ORIGIN}${url}`;
 }
 
+function formatScanStatus(status: string): string {
+  return status
+    .toLowerCase()
+    .split('_')
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+}
+
 export default function ReviewScanPage() {
   const router = useRouter();
   const scanId = useMemo(() => {
@@ -111,11 +119,17 @@ export default function ReviewScanPage() {
       {scan ? (
         <section style={{ display: 'grid', gap: '1rem' }}>
           <p>
-            Status: <strong>{scan.status}</strong>
+            Status: <strong>{formatScanStatus(scan.status)}</strong>
           </p>
 
           {scan.error ? <p style={{ color: '#b91c1c' }}>Error: {scan.error}</p> : null}
-          {scan.ocrText ? <p>OCR text: {scan.ocrText}</p> : null}
+
+          {scan.ocrText ? (
+            <details>
+              <summary style={{ cursor: 'pointer' }}>Debug OCR Text</summary>
+              <p style={{ marginTop: '0.5rem' }}>{scan.ocrText}</p>
+            </details>
+          ) : null}
 
           {scan.status === 'PROCESSING' || scan.status === 'QUEUED' ? <p>Processing scan...</p> : null}
 
@@ -168,11 +182,11 @@ export default function ReviewScanPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Pick</th>
-                    <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Card</th>
+                    <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Select</th>
+                    <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Candidate</th>
                     <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Preview</th>
-                    <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Score</th>
-                    <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Validation</th>
+                    <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Match</th>
+                    <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Evidence</th>
                   </tr>
                 </thead>
                 <tbody>

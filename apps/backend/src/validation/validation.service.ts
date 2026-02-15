@@ -21,35 +21,13 @@ export class ValidationService {
       .join(' ')
       .trim();
 
-    const normalizedQuery = query || candidate.name;
-    const encodedQuery = encodeURIComponent(normalizedQuery);
-
     const ocrTokens = tokenize(ocrText);
-    const candidateTokens = tokenize(normalizedQuery);
+    const candidateTokens = tokenize(query || candidate.name);
     const lexicalScore = overlapScore(ocrTokens, candidateTokens);
 
-    const hints: SourceHint[] = [
-      {
-        source: 'ebay_sold',
-        title: `eBay sold: ${normalizedQuery}`,
-        url: `https://www.ebay.com/sch/i.html?_nkw=${encodedQuery}&LH_Sold=1&LH_Complete=1`,
-        score: Number((lexicalScore * 0.9 + 0.1).toFixed(3)),
-      },
-      {
-        source: 'psa',
-        title: `PSA search: ${normalizedQuery}`,
-        url: `https://www.psacard.com/cert/${encodedQuery}`,
-        score: Number((lexicalScore * 0.8 + 0.15).toFixed(3)),
-      },
-    ];
-
-    const validationScore = Number(
-      (hints.reduce((sum, item) => sum + item.score, 0) / hints.length).toFixed(3),
-    );
-
     return {
-      validationScore,
-      sourceHints: hints,
+      validationScore: Number(lexicalScore.toFixed(3)),
+      sourceHints: [],
     };
   }
 }

@@ -110,4 +110,4 @@ npm run typecheck
 - Scan upload supports `image` (front, required) and `backImage` (optional but recommended).
 - Matching now uses weighted scoring with structured OCR hints (`year`, `card number`, `brand`) when available.
 - CSV import supports `imageUrl`/`image_url` to fetch card images and store them in Garage/S3.
-- Validation hints are currently generated automatically for eBay sold and PSA lookup URLs and surfaced in scan review.
+- Validation now uses lexical scoring; scan review links come from lookup hints (DuckDuckGo/web lookup).

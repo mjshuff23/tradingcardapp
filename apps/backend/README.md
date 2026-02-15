@@ -9,7 +9,7 @@ Backend API for scan jobs, catalog, and CSV imports.
 - `src/import/*`: CSV card import
 - `src/storage/*`: Garage S3-compatible upload and thumbnail storage
 - `src/ocr/*`: OCR abstraction layer
-- `src/validation/*`: automatic validation hints (eBay sold + PSA)
+- `src/validation/*`: lexical validation scoring utility
 - `src/prisma/*`: Prisma service/module
 
 ## API Base

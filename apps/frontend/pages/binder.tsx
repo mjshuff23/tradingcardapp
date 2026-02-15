@@ -1,21 +1,14 @@
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
-import { CollectionStatus, importCardsCsv, listCards } from '../lib/api';
+import { CardRecord, CollectionStatus, importCardsCsv, listCards } from '../lib/api';
 
 type Filter = CollectionStatus | 'ALL';
+const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export default function BinderPage() {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('ALL');
-  const [cards, setCards] = useState<Array<{
-    id: number;
-    name: string;
-    set: string | null;
-    year: number | null;
-    player: string | null;
-    collectionStatus: CollectionStatus;
-    confidence: number | null;
-  }>>([]);
+  const [cards, setCards] = useState<CardRecord[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [csvBusy, setCsvBusy] = useState(false);
@@ -106,30 +99,54 @@ export default function BinderPage() {
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
         <thead>
           <tr>
+            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Image</th>
             <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Card</th>
             <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Set</th>
             <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Status</th>
             <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Confidence</th>
+            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Action</th>
           </tr>
         </thead>
         <tbody>
           {cards.map((card) => (
             <tr key={card.id}>
               <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem' }}>
-                {card.year ? `${card.year} ` : ''}
-                {card.player ? `${card.player} - ` : ''}
-                {card.name}
+                <img
+                  src={`${API_ORIGIN}/api/v1/cards/${card.id}/image`}
+                  alt={`${card.name} thumbnail`}
+                  style={{
+                    width: '68px',
+                    height: '96px',
+                    objectFit: 'cover',
+                    borderRadius: '0.4rem',
+                    border: '1px solid #ddd',
+                    background: '#f3f4f6',
+                  }}
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                  }}
+                />
+              </td>
+              <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem' }}>
+                <Link href={`/cards/${card.id}`}>
+                  {card.year ? `${card.year} ` : ''}
+                  {card.player ? `${card.player} - ` : ''}
+                  {card.name}
+                </Link>
               </td>
               <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem' }}>{card.set ?? '-'}</td>
               <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem' }}>{card.collectionStatus}</td>
               <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem' }}>
                 {card.confidence ? card.confidence.toFixed(3) : 'n/a'}
               </td>
+              <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem' }}>
+                <Link href={`/cards/${card.id}`}>Edit</Link>
+              </td>
             </tr>
           ))}
           {!cards.length ? (
             <tr>
-              <td colSpan={4} style={{ padding: '0.75rem' }}>
+              <td colSpan={6} style={{ padding: '0.75rem' }}>
                 No cards yet.
               </td>
             </tr>
