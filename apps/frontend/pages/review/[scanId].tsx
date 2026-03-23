@@ -1,6 +1,11 @@
+import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useMemo, useState } from 'react';
+import { AppShell } from '../../components/AppShell';
+import { CardImage } from '../../components/CardImage';
+import { PageHeader } from '../../components/PageHeader';
+import { StatusPill } from '../../components/StatusPill';
 import { confirmScan, getScan, ScanResponse } from '../../lib/api';
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -105,169 +110,194 @@ export default function ReviewScanPage() {
     }
   };
 
+  const statusTone =
+    scan?.status === 'CONFIRMED'
+      ? 'success'
+      : scan?.status === 'FAILED'
+        ? 'danger'
+        : scan?.status === 'NEEDS_REVIEW'
+          ? 'accent'
+          : 'neutral';
+
   return (
-    <main style={{ maxWidth: 900, margin: '2rem auto', padding: '0 1rem', fontFamily: 'system-ui' }}>
-      <h1>Review Scan</h1>
-      <p>
-        Scan ID: <strong>{scanId ?? '...'}</strong>
-      </p>
+    <AppShell>
+      <Head>
+        <title>Review Scan | Trading Card App</title>
+      </Head>
 
-      {error ? <p style={{ color: '#b91c1c' }}>{error}</p> : null}
+      <div className="stack fade-up">
+        <PageHeader
+          eyebrow="Scan Review"
+          title={`Review scan ${scanId ?? '...'}`}
+          description="Inspect the OCR result, compare candidates, and confirm the best match into the binder."
+          actions={
+            <div className="action-row">
+              <StatusPill
+                label={scan ? formatScanStatus(scan.status) : 'Loading'}
+                tone={statusTone}
+              />
+              <Link className="button-ghost" href="/scan">
+                Scan another
+              </Link>
+            </div>
+          }
+        />
 
-      {!scan ? <p>Loading scan...</p> : null}
+        {error ? <p className="message message--error">{error}</p> : null}
+        {!scan ? <p className="message">Loading scan...</p> : null}
 
-      {scan ? (
-        <section style={{ display: 'grid', gap: '1rem' }}>
-          <p>
-            Status: <strong>{formatScanStatus(scan.status)}</strong>
-          </p>
+        {scan ? (
+          <>
+            {scan.error ? <p className="message message--error">Error: {scan.error}</p> : null}
+            {confirmed ? (
+              <p className="message message--success">
+                Card saved (ID: {confirmed}). <Link href="/binder">Open binder</Link>
+              </p>
+            ) : null}
 
-          {scan.error ? <p style={{ color: '#b91c1c' }}>Error: {scan.error}</p> : null}
+            {(scan.status === 'PROCESSING' || scan.status === 'QUEUED') ? (
+              <section className="surface">
+                <h2 className="surface-title">Processing scan</h2>
+                <p className="surface-copy">
+                  The backend is still working through OCR and candidate lookup. This page will keep polling until the scan is ready.
+                </p>
+              </section>
+            ) : null}
 
-          {scan.ocrText ? (
-            <details>
-              <summary style={{ cursor: 'pointer' }}>Debug OCR Text</summary>
-              <p style={{ marginTop: '0.5rem' }}>{scan.ocrText}</p>
-            </details>
-          ) : null}
-
-          {scan.status === 'PROCESSING' || scan.status === 'QUEUED' ? <p>Processing scan...</p> : null}
-
-          {(scan.frontImageUrl || scan.backImageUrl) ? (
-            <section
-              style={{
-                display: 'grid',
-                gap: '1rem',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                alignItems: 'start',
-              }}
-            >
-              {scan.frontImageUrl ? (
-                <div>
-                  <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Uploaded Front</p>
-                  <img
-                    src={toAbsoluteApiUrl(scan.frontImageUrl) ?? undefined}
-                    alt="Uploaded front"
-                    style={{
-                      width: '100%',
-                      maxWidth: '320px',
-                      borderRadius: '0.5rem',
-                      border: '1px solid #ddd',
-                    }}
-                  />
+            {(scan.frontImageUrl || scan.backImageUrl) ? (
+              <section className="surface">
+                <div className="section-header">
+                  <div>
+                    <h2>Uploaded images</h2>
+                    <p className="fine-print">Reference shots used for OCR and match lookup.</p>
+                  </div>
                 </div>
-              ) : null}
 
-              {scan.backImageUrl ? (
-                <div>
-                  <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Uploaded Back</p>
-                  <img
-                    src={toAbsoluteApiUrl(scan.backImageUrl) ?? undefined}
-                    alt="Uploaded back"
-                    style={{
-                      width: '100%',
-                      maxWidth: '320px',
-                      borderRadius: '0.5rem',
-                      border: '1px solid #ddd',
-                    }}
-                  />
+                <div className="preview-grid">
+                  {scan.frontImageUrl ? (
+                    <div className="preview-frame">
+                      <h3>Front</h3>
+                      <CardImage
+                        alt="Uploaded front"
+                        src={toAbsoluteApiUrl(scan.frontImageUrl) ?? undefined}
+                      />
+                    </div>
+                  ) : null}
+
+                  {scan.backImageUrl ? (
+                    <div className="preview-frame">
+                      <h3>Back</h3>
+                      <CardImage
+                        alt="Uploaded back"
+                        src={toAbsoluteApiUrl(scan.backImageUrl) ?? undefined}
+                      />
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </section>
-          ) : null}
+              </section>
+            ) : null}
 
-          {scan.candidates.length > 0 ? (
-            <div>
-              <h2>Candidates</h2>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Select</th>
-                    <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Candidate</th>
-                    <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Preview</th>
-                    <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Match</th>
-                    <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>Evidence</th>
-                  </tr>
-                </thead>
-                <tbody>
+            {scan.ocrText ? (
+              <section className="surface">
+                <details>
+                  <summary>OCR debug text</summary>
+                  <p className="helper-text summary-copy">{scan.ocrText}</p>
+                </details>
+              </section>
+            ) : null}
+
+            {scan.candidates.length > 0 ? (
+              <section className="surface">
+                <div className="section-header">
+                  <div>
+                    <h2>Candidates</h2>
+                    <p className="fine-print">
+                      Pick the best match, then confirm it into the collection.
+                    </p>
+                  </div>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={handleConfirm}
+                    disabled={busy || selectedCandidateId === null}
+                  >
+                    {busy ? 'Confirming...' : 'Confirm candidate'}
+                  </button>
+                </div>
+
+                <div className="candidate-grid">
                   {scan.candidates.map((candidate) => {
                     const previewImageUrl =
                       candidate.sourceHints?.find((hint) => hint.imageUrl)?.imageUrl ?? null;
 
                     return (
-                    <tr key={candidate.id}>
-                      <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem', verticalAlign: 'top' }}>
+                      <article
+                        key={candidate.id}
+                        className={`candidate-card${
+                          selectedCandidateId === candidate.id ? ' is-selected' : ''
+                        }`}
+                      >
                         <input
+                          className="candidate-radio"
                           type="radio"
                           name="candidate"
                           checked={selectedCandidateId === candidate.id}
                           onChange={() => setSelectedCandidateId(candidate.id)}
                         />
-                      </td>
-                      <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem', verticalAlign: 'top' }}>
-                        {candidate.year ? `${candidate.year} ` : ''}
-                        {candidate.player ? `${candidate.player} - ` : ''}
-                        {candidate.name}
-                        {candidate.set ? ` (${candidate.set})` : ''}
-                        {candidate.variant ? ` [${candidate.variant}]` : ''}
-                      </td>
-                      <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem', verticalAlign: 'top' }}>
-                        {previewImageUrl ? (
-                          <img
-                            src={previewImageUrl}
-                            alt={`${candidate.name} preview`}
-                            style={{
-                              width: '110px',
-                              height: '150px',
-                              objectFit: 'cover',
-                              borderRadius: '0.5rem',
-                              border: '1px solid #ddd',
-                              background: '#f3f4f6',
-                            }}
-                          />
-                        ) : (
-                          <span style={{ color: '#6b7280' }}>No preview</span>
-                        )}
-                      </td>
-                      <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem', verticalAlign: 'top' }}>
-                        {candidate.score.toFixed(3)}
-                      </td>
-                      <td style={{ borderBottom: '1px solid #eee', padding: '0.5rem', verticalAlign: 'top' }}>
-                        {candidate.validationScore?.toFixed(3) ?? 'n/a'}
-                        {candidate.sourceHints?.length ? (
-                          <ul>
-                            {candidate.sourceHints.map((hint) => (
-                              <li key={`${candidate.id}-${hint.source}-${hint.url}`}>
-                                <a href={hint.url} target="_blank" rel="noreferrer">
-                                  {hint.title}
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </td>
-                    </tr>
-                  )})}
-                </tbody>
-              </table>
 
-              <button type="button" onClick={handleConfirm} disabled={busy || selectedCandidateId === null}>
-                {busy ? 'Confirming...' : 'Confirm Candidate'}
-              </button>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+                        <CardImage alt={`${candidate.name} preview`} src={previewImageUrl} />
 
-      {confirmed ? (
-        <p style={{ color: '#0f766e' }}>
-          Card saved (ID: {confirmed}). <Link href="/binder">Open binder</Link>
-        </p>
-      ) : null}
+                        <div>
+                          <h3>
+                            {candidate.year ? `${candidate.year} ` : ''}
+                            {candidate.player ? `${candidate.player} - ` : ''}
+                            {candidate.name}
+                          </h3>
+                          <p className="helper-text">
+                            {candidate.set ? `${candidate.set}` : 'Unknown set'}
+                            {candidate.variant ? ` · ${candidate.variant}` : ''}
+                            {candidate.sport ? ` · ${candidate.sport}` : ''}
+                          </p>
 
-      <p>
-        <Link href="/scan">Scan another</Link>
-      </p>
-    </main>
+                          <div className="candidate-meta">
+                            <StatusPill label={`Match ${candidate.score.toFixed(3)}`} tone="accent" />
+                            <StatusPill
+                              label={`Validation ${
+                                candidate.validationScore?.toFixed(3) ?? 'n/a'
+                              }`}
+                            />
+                          </div>
+
+                          {candidate.sourceHints?.length ? (
+                            <ul className="evidence-list">
+                              {candidate.sourceHints.map((hint) => (
+                                <li key={`${candidate.id}-${hint.source}-${hint.url}`}>
+                                  <a className="subtle-link" href={hint.url} target="_blank" rel="noreferrer">
+                                    {hint.title}
+                                  </a>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="helper-text">No source evidence attached to this candidate.</p>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : (
+              <section className="surface">
+                <div className="empty-state">
+                  No candidates are available yet. If the scan failed to identify a card, try a
+                  sharper photo or include the back image.
+                </div>
+              </section>
+            )}
+          </>
+        ) : null}
+      </div>
+    </AppShell>
   );
 }

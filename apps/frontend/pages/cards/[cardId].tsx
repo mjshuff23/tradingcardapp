@@ -1,6 +1,11 @@
+import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { AppShell } from '../../components/AppShell';
+import { CardImage } from '../../components/CardImage';
+import { PageHeader } from '../../components/PageHeader';
+import { StatusPill } from '../../components/StatusPill';
 import { CardRecord, CollectionStatus, getCard, updateCard } from '../../lib/api';
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -113,123 +118,163 @@ export default function CardDetailPage() {
   };
 
   return (
-    <main style={{ maxWidth: 960, margin: '2rem auto', padding: '0 1rem', fontFamily: 'system-ui' }}>
-      <h1>Card Detail</h1>
-      <p>
-        <Link href="/binder">Back to binder</Link>
-      </p>
+    <AppShell>
+      <Head>
+        <title>{card?.name ? `${card.name} | Trading Card App` : 'Card Detail | Trading Card App'}</title>
+      </Head>
 
-      {loading ? <p>Loading card...</p> : null}
-      {error ? <p style={{ color: '#b91c1c' }}>{error}</p> : null}
-      {message ? <p style={{ color: '#0f766e' }}>{message}</p> : null}
+      <div className="stack fade-up">
+        <PageHeader
+          eyebrow="Card Detail"
+          title={card?.name ?? 'Reviewing card metadata'}
+          description="Clean up scanned metadata here without leaving the collection view."
+          actions={
+            <Link className="button-ghost" href="/binder">
+              Back to binder
+            </Link>
+          }
+        />
 
-      {card && form ? (
-        <section
-          style={{
-            display: 'grid',
-            gap: '1.5rem',
-            gridTemplateColumns: 'minmax(220px, 300px) 1fr',
-            alignItems: 'start',
-          }}
-        >
-          <div>
-            <img
-              src={`${API_ORIGIN}/api/v1/cards/${card.id}/image`}
-              alt={card.name}
-              style={{
-                width: '100%',
-                maxWidth: '280px',
-                borderRadius: '0.6rem',
-                border: '1px solid #ddd',
-                background: '#f3f4f6',
-              }}
-              onError={(event) => {
-                event.currentTarget.style.display = 'none';
-              }}
-            />
-          </div>
+        {loading ? <p className="message">Loading card...</p> : null}
+        {error ? <p className="message message--error">{error}</p> : null}
+        {message ? <p className="message message--success">{message}</p> : null}
 
-          <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '0.75rem' }}>
-            <label>
-              Name
-              <input
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-                required
-              />
-            </label>
+        {card && form ? (
+          <section className="editor-shell">
+            <aside className="editor-aside">
+              <CardImage alt={card.name} src={`${API_ORIGIN}/api/v1/cards/${card.id}/image`} />
 
-            <label>
-              Set
-              <input
-                value={form.set}
-                onChange={(event) => setForm({ ...form, set: event.target.value })}
-              />
-            </label>
+              <div className="surface">
+                <div className="action-row">
+                  <StatusPill
+                    label={card.collectionStatus}
+                    tone={card.collectionStatus === 'OWNED' ? 'success' : 'accent'}
+                  />
+                  <StatusPill
+                    label={card.confidence !== null ? `Confidence ${card.confidence.toFixed(3)}` : 'No confidence'}
+                  />
+                </div>
 
-            <label>
-              Year
-              <input
-                value={form.year}
-                onChange={(event) => setForm({ ...form, year: event.target.value })}
-                inputMode="numeric"
-              />
-            </label>
+                <div className="detail-grid detail-grid-spaced">
+                  <div className="detail-item">
+                    <strong>Set</strong>
+                    <span>{card.set ?? 'Unknown'}</span>
+                  </div>
+                  <div className="detail-item">
+                    <strong>Year</strong>
+                    <span>{card.year ?? 'Unknown'}</span>
+                  </div>
+                  <div className="detail-item">
+                    <strong>Player</strong>
+                    <span>{card.player ?? 'Unknown'}</span>
+                  </div>
+                  <div className="detail-item">
+                    <strong>Sport</strong>
+                    <span>{card.sport ?? 'Unknown'}</span>
+                  </div>
+                </div>
+              </div>
+            </aside>
 
-            <label>
-              Player
-              <input
-                value={form.player}
-                onChange={(event) => setForm({ ...form, player: event.target.value })}
-              />
-            </label>
+            <section className="surface">
+              <form className="stack" onSubmit={handleSubmit}>
+                <div className="field-grid">
+                  <div className="field">
+                    <label htmlFor="name">Name</label>
+                    <input
+                      id="name"
+                      value={form.name}
+                      onChange={(event) => setForm({ ...form, name: event.target.value })}
+                      required
+                    />
+                  </div>
 
-            <label>
-              Variant
-              <input
-                value={form.variant}
-                onChange={(event) => setForm({ ...form, variant: event.target.value })}
-              />
-            </label>
+                  <div className="field">
+                    <label htmlFor="set">Set</label>
+                    <input
+                      id="set"
+                      value={form.set}
+                      onChange={(event) => setForm({ ...form, set: event.target.value })}
+                    />
+                  </div>
 
-            <label>
-              Sport
-              <input
-                value={form.sport}
-                onChange={(event) => setForm({ ...form, sport: event.target.value })}
-              />
-            </label>
+                  <div className="field">
+                    <label htmlFor="year">Year</label>
+                    <input
+                      id="year"
+                      value={form.year}
+                      onChange={(event) => setForm({ ...form, year: event.target.value })}
+                      inputMode="numeric"
+                    />
+                  </div>
 
-            <label>
-              Grade Estimate
-              <input
-                value={form.gradeEstimate}
-                onChange={(event) => setForm({ ...form, gradeEstimate: event.target.value })}
-              />
-            </label>
+                  <div className="field">
+                    <label htmlFor="player">Player</label>
+                    <input
+                      id="player"
+                      value={form.player}
+                      onChange={(event) => setForm({ ...form, player: event.target.value })}
+                    />
+                  </div>
 
-            <label>
-              Status
-              <select
-                value={form.collectionStatus}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    collectionStatus: event.target.value as CollectionStatus,
-                  })
-                }
-              >
-                <option value="OWNED">Owned</option>
-                <option value="WANTED">Wanted</option>
-              </select>
-            </label>
+                  <div className="field">
+                    <label htmlFor="variant">Variant</label>
+                    <input
+                      id="variant"
+                      value={form.variant}
+                      onChange={(event) => setForm({ ...form, variant: event.target.value })}
+                    />
+                  </div>
 
-            <button type="submit" disabled={busy}>
-              {busy ? 'Saving...' : 'Save Changes'}
-            </button>
-          </form>
-        </section>
-      ) : null}
-    </main>
+                  <div className="field">
+                    <label htmlFor="sport">Sport</label>
+                    <input
+                      id="sport"
+                      value={form.sport}
+                      onChange={(event) => setForm({ ...form, sport: event.target.value })}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="gradeEstimate">Grade estimate</label>
+                    <input
+                      id="gradeEstimate"
+                      value={form.gradeEstimate}
+                      onChange={(event) => setForm({ ...form, gradeEstimate: event.target.value })}
+                    />
+                  </div>
+
+                  <div className="field">
+                    <label htmlFor="status">Status</label>
+                    <select
+                      id="status"
+                      value={form.collectionStatus}
+                      onChange={(event) =>
+                        setForm({
+                          ...form,
+                          collectionStatus: event.target.value as CollectionStatus,
+                        })
+                      }
+                    >
+                      <option value="OWNED">Owned</option>
+                      <option value="WANTED">Wanted</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="action-row">
+                  <button className="button" type="submit" disabled={busy}>
+                    {busy ? 'Saving...' : 'Save changes'}
+                  </button>
+                  <Link className="button-secondary" href="/binder">
+                    Return to binder
+                  </Link>
+                </div>
+              </form>
+            </section>
+          </section>
+        ) : null}
+      </div>
+    </AppShell>
   );
 }
