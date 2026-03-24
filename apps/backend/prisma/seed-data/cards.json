@@ -1,0 +1,82 @@
+[
+  {
+    "name": "1989 Upper Deck #1",
+    "set": "Upper Deck",
+    "year": 1989,
+    "player": "Ken Griffey Jr.",
+    "variant": "Base",
+    "sport": "Baseball",
+    "collectionStatus": "OWNED",
+    "gradeEstimate": "PSA 8",
+    "confidence": 0.982,
+    "imagePath": "griffey-jr.jpg"
+  },
+  {
+    "name": "1986 Fleer #57",
+    "set": "Fleer Basketball",
+    "year": 1986,
+    "player": "Michael Jordan",
+    "variant": "Base",
+    "sport": "Basketball",
+    "collectionStatus": "WANTED",
+    "gradeEstimate": "Raw",
+    "confidence": 0.995,
+    "imagePath": "1986jordan.jpg"
+  },
+  {
+    "name": "2000 Bowman Chrome",
+    "set": "Bowman Chrome",
+    "year": 2000,
+    "player": "Tom Brady",
+    "variant": "Rookie",
+    "sport": "Football",
+    "collectionStatus": "OWNED",
+    "gradeEstimate": "PSA 9",
+    "confidence": 0.971,
+    "imagePath": "bradybowman.jpg"
+  },
+  {
+    "name": "1979 O-Pee-Chee #18",
+    "set": "O-Pee-Chee Hockey",
+    "year": 1979,
+    "player": "Wayne Gretzky",
+    "variant": "Rookie",
+    "sport": "Hockey",
+    "collectionStatus": "WANTED",
+    "gradeEstimate": "Raw",
+    "confidence": 0.989,
+    "imagePath": "gretzky.jpg"
+  },
+  {
+    "name": "2018 Topps Chrome #150",
+    "set": "Topps Chrome",
+    "year": 2018,
+    "player": "Shohei Ohtani",
+    "variant": "Base",
+    "sport": "Baseball",
+    "collectionStatus": "OWNED",
+    "gradeEstimate": "PSA 10",
+    "confidence": 0.964,
+    "imagePath": "shohei.jpg"
+  },
+  {
+    "name": "A1037",
+    "set": "1993-94 Upper Deck #466 Michael Jordan SKL",
+    "year": 1993,
+    "player": "Michael Jordan",
+    "sport": "Basketball",
+    "collectionStatus": "OWNED",
+    "confidence": 0.497,
+    "imagePath": "mj93-94ud.jpg"
+  },
+  {
+    "name": "Michael Jordan #SPX5 for sale",
+    "set": "SPX",
+    "year": 1997,
+    "player": "Michael Jordan",
+    "sport": "Basketball",
+    "collectionStatus": "OWNED",
+    "confidence": 0.581,
+    "imagePath": "mj96up.jpg"
+  }
+]

@@ -105,6 +105,16 @@ npm exec -w apps/backend prisma generate
 npm exec -w apps/backend prisma migrate dev
 ```
 
+Hosted bootstrap / seed:
+
+```bash
+npm run db:push -w apps/backend
+npm run db:seed -w apps/backend
+```
+
+Seed cards live in `apps/backend/prisma/seed-data/cards.json`.
+Optional seed images can be placed in `apps/backend/prisma/seed-assets/` and referenced via `imagePath`.
+
 ## Tests
 ```bash
 npm run test -w apps/backend
