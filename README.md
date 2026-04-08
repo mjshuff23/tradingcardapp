@@ -108,6 +108,8 @@ npm run db:migrate -w apps/backend
 npm run db:seed -w apps/backend
 ```
 
+If a hosted database already exists and Railway/Railpack fails with Prisma `P3005`, set `PRISMA_BASELINE_ON_P3005=true` for one deploy. The backend startup script will only baseline automatically when the live schema already matches `apps/backend/prisma/schema.prisma`. Remove the flag after the first successful deploy.
+
 To export legacy local `Card` rows into the normalized catalog seed before a reset:
 
 ```bash

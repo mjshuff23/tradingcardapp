@@ -12,13 +12,10 @@
     "db:reset": "prisma migrate reset --force",
     "db:export:catalog": "node prisma/export-catalog.js",
     "db:seed": "prisma db seed",
-    "db:prepare": "prisma migrate deploy && prisma db seed",
+    "db:prepare": "node prisma/prepare.js",
     "test": "jest --config ./jest.config.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "typecheck": "tsc -p tsconfig.json --noEmit"
-  },
-  "prisma": {
-    "seed": "node prisma/seed.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.883.0",

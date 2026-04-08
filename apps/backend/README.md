@@ -141,6 +141,8 @@ npm run db:migrate -w apps/backend
 npm run db:seed -w apps/backend
 ```
 
+If a hosted PostgreSQL database already has tables and `start:prod` fails with Prisma `P3005`, set `PRISMA_BASELINE_ON_P3005=true` for one deployment. The production bootstrap will only mark migrations as applied when the live database already matches `prisma/schema.prisma`. Remove the flag after the baseline succeeds.
+
 Legacy card export to normalized seed data:
 
 ```bash
