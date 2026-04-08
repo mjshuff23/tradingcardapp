@@ -5,6 +5,11 @@ type PreviewCacheEntry = {
   expiresAt: number;
 };
 
+export type PreviewImagePayload = {
+  buffer: Buffer;
+  contentType: string;
+};
+
 @Injectable()
 export class LinkPreviewService {
   private readonly logger = new Logger(LinkPreviewService.name);
@@ -28,6 +33,28 @@ export class LinkPreviewService {
     });
 
     return imageUrl;
+  }
+
+  shouldProxyPreviewImage(url: string | null | undefined): boolean {
+    if (!url) {
+      return false;
+    }
+
+    try {
+      const parsed = new URL(url);
+      return parsed.hostname.toLowerCase() === 'i.ebayimg.com';
+    } catch {
+      return false;
+    }
+  }
+
+  async getTrustedPreviewImage(url: string): Promise<PreviewImagePayload | null> {
+    const imageUrl = await this.getPreviewImage(url);
+    if (!this.shouldProxyPreviewImage(imageUrl)) {
+      return null;
+    }
+
+    return this.fetchImage(imageUrl);
   }
 
   private async resolvePreviewImage(url: string): Promise<string | null> {
@@ -64,6 +91,42 @@ export class LinkPreviewService {
       return image;
     } catch (error) {
       this.logger.debug(`Preview lookup failed for ${url}: ${(error as Error).message}`);
+      return null;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  private async fetchImage(url: string): Promise<PreviewImagePayload | null> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetch(url, {
+        redirect: 'follow',
+        signal: controller.signal,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36',
+        },
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const contentType = response.headers.get('content-type') ?? '';
+      if (!contentType.startsWith('image/')) {
+        return null;
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      return {
+        buffer,
+        contentType,
+      };
+    } catch (error) {
+      this.logger.debug(`Image fetch failed for ${url}: ${(error as Error).message}`);
       return null;
     } finally {
       clearTimeout(timeoutId);

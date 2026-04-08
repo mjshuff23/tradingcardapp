@@ -227,8 +227,9 @@ export default function ReviewScanPage() {
 
                 <div className="candidate-grid">
                   {scan.candidates.map((candidate) => {
-                    const previewImageUrl =
-                      candidate.sourceHints?.find((hint) => hint.imageUrl)?.imageUrl ?? null;
+                    const previewImageUrl = toAbsoluteApiUrl(
+                      candidate.sourceHints?.find((hint) => hint.imageUrl)?.imageUrl ?? null,
+                    );
 
                     return (
                       <article

@@ -73,12 +73,12 @@ export function parseStructuredCardHints(frontText: string, backText?: string): 
   );
 
   const explicitCardNumbers = Array.from(
-    normalized.matchAll(
+    lowered.matchAll(
       /(?:card\s*(?:no|number|#)?\s*|no\.?\s*|number\s*|#\s*)([a-z]?\d{1,6}[a-z]?)/g,
     ),
   ).map((match) => match[1].toUpperCase());
 
-  const slabStyleNumbers = Array.from(normalized.matchAll(/#\s*([a-z0-9]{3,8})\b/g)).map((match) =>
+  const slabStyleNumbers = Array.from(lowered.matchAll(/#\s*([a-z0-9]{3,8})\b/g)).map((match) =>
     match[1].toUpperCase(),
   );
 

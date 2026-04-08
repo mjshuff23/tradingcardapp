@@ -24,6 +24,15 @@ describe('parseStructuredCardHints', () => {
     expect(hints.subsets).toEqual(expect.arrayContaining(['spx', 'die cut']));
   });
 
+  it('extracts card numbers from raw slab-style markers before normalization strips the pound sign', () => {
+    const hints = parseStructuredCardHints(
+      'Front text',
+      '1993-94 Upper Deck #466 Michael Jordan SKL',
+    );
+
+    expect(hints.cardNumbers).toContain('466');
+  });
+
   it('avoids pulling random stat numbers as card numbers', () => {
     const hints = parseStructuredCardHints(
       'Front text',

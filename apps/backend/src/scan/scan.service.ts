@@ -30,6 +30,67 @@ type CandidateReference = {
   metadata?: Prisma.JsonValue | null;
 };
 
+const CARD_BRAND_KEYWORDS = [
+  'upper deck',
+  'topps',
+  'panini',
+  'skybox',
+  'donruss',
+  'prizm',
+  'hoops',
+  'fleer',
+  'bowman',
+  'score',
+  'pokemon',
+  'chrome',
+  'optic',
+];
+
+const CARD_SUBSET_KEYWORDS = [
+  'spx',
+  'sp authentic',
+  'die cut',
+  'refractor',
+  'holo',
+  'silver',
+  'finest',
+  'stadium club',
+  'rookie',
+  'auto',
+  'autograph',
+  'jersey',
+  'patch',
+];
+
+const REFERENCE_NOISE_TERMS = [
+  'for sale',
+  'sample',
+  'buy now',
+  'auction',
+  'lot of',
+  'price guide',
+  'checklist',
+  'for trade',
+];
+
+const PROFILE_NOISE_TERMS = [
+  'wikipedia',
+  'biography',
+  'businessman',
+  'stats',
+  'facts',
+  'height',
+  'age',
+  'nascar',
+];
+
+const PROFILE_DOMAINS = [
+  'wikipedia.org',
+  'britannica.com',
+  'biography.com',
+  'basketball-reference.com',
+];
+
 @Injectable()
 export class ScanService {
   private readonly logger = new Logger(ScanService.name);
@@ -100,7 +161,11 @@ export class ScanService {
     const enrichedCandidates = await Promise.all(
       scanJob.candidates.map(async (candidate) => {
         const sourceHints = this.normalizeSourceHints(candidate.sourceHints);
-        const enrichedSourceHints = await this.enrichSourceHintsWithPreviewImages(sourceHints);
+        const enrichedSourceHints = await this.enrichSourceHintsWithPreviewImages(
+          scanId,
+          candidate.id,
+          sourceHints,
+        );
         return {
           ...candidate,
           sourceHints: enrichedSourceHints,
@@ -148,6 +213,42 @@ export class ScanService {
     }
 
     return this.storageService.readImage(key);
+  }
+
+  async getCandidatePreviewImage(
+    scanId: number,
+    candidateId: number,
+    hintUrl: string,
+  ): Promise<{ buffer: Buffer; contentType: string }> {
+    if (!hintUrl.trim()) {
+      throw new BadRequestException('hintUrl is required.');
+    }
+
+    const candidate = await this.prisma.scanCandidate.findFirst({
+      where: {
+        id: candidateId,
+        scanJobId: scanId,
+      },
+      select: {
+        sourceHints: true,
+      },
+    });
+
+    if (!candidate) {
+      throw new NotFoundException('Scan candidate not found.');
+    }
+
+    const hint = this.normalizeSourceHints(candidate.sourceHints).find((item) => item.url === hintUrl);
+    if (!hint) {
+      throw new NotFoundException('Source hint not found for candidate.');
+    }
+
+    const image = await this.linkPreviewService.getTrustedPreviewImage(hint.url);
+    if (!image) {
+      throw new NotFoundException('Trusted preview image not available for this source hint.');
+    }
+
+    return image;
   }
 
   async confirmScan(scanId: number, dto: ConfirmScanDto) {
@@ -308,18 +409,28 @@ export class ScanService {
       take: 1200,
     });
 
-    const catalogDerived: CandidateReference[] = existingCards.map((card) => ({
-      name: card.name,
-      set: card.set,
-      year: card.year,
-      player: card.player,
-      variant: card.variant,
-      sport: card.sport,
-      source: 'catalog_card',
-      metadata: {
-        fromCardId: card.id,
-      },
-    }));
+    const catalogDerived: CandidateReference[] = existingCards.map((card) => {
+      const number = this.extractReferenceNumber({
+        name: card.name,
+        set: card.set,
+        variant: card.variant,
+        metadata: null,
+      });
+
+      return {
+        name: card.name,
+        set: card.set,
+        year: card.year,
+        player: card.player,
+        variant: card.variant,
+        sport: card.sport,
+        source: 'catalog_card',
+        metadata: {
+          fromCardId: card.id,
+          number,
+        },
+      };
+    });
 
     return this.dedupeReferencesByKey(catalogDerived);
   }
@@ -339,14 +450,16 @@ export class ScanService {
     const ocrText = ocr.text;
     const backText = ocr.backText || '';
     const ocrTokens = tokenize(ocrText);
-    const lookupCorpus = ocr.lookup.corpus;
-    const lookupHints = ocr.lookup.hints;
+    const lookupHints = ocr.lookup.hints.filter((hint) => this.isLookupHintCardLike(hint));
+    const lookupCorpus = normalizeText(lookupHints.map((hint) => hint.title).join(' '));
     const lockedPlayer = this.detectLockedPlayer(
       `${ocrText} ${backText} ${lookupCorpus}`,
       references,
     );
     const lookupDerivedReferences = this.buildLookupDerivedReferences(lookupHints, lockedPlayer);
-    const allReferences = this.dedupeReferencesByKey([...references, ...lookupDerivedReferences]);
+    const allReferences = this.filterReferencesForRanking(
+      this.dedupeReferencesByKey([...references, ...lookupDerivedReferences]),
+    );
 
     if (!allReferences.length) {
       const fallbackValidation = this.validationService.validateCandidate(
@@ -390,14 +503,22 @@ export class ScanService {
         const fuzzy = levenshteinSimilarity(normalizeText(ocrText).slice(0, 220), normalizedSearchable);
 
         const yearBonus = this.computeYearBonus(reference.year, ocr.hints.years, ocrText);
-        const playerBonus = this.computePlayerBonus(reference.player, ocrText, backText);
-        const playerLockBonus = this.computePlayerLockBonus(reference.player, lockedPlayer);
+        const structuredReference = this.countReferenceSignals(reference) >= 2;
+        const playerBonus = structuredReference
+          ? this.computePlayerBonus(reference.player, ocrText, backText)
+          : 0;
+        const playerLockBonus = structuredReference
+          ? this.computePlayerLockBonus(reference.player, lockedPlayer)
+          : 0;
         const setBonus = this.computeSetBonus(reference, ocrText, backText, [
           ...ocr.hints.brands,
           ...ocr.hints.subsets,
         ]);
-        const numberBonus = this.computeNumberBonus(reference.metadata, ocr.hints.cardNumbers);
-        const lookupBonus = this.computeLookupBonus(searchable, lookupCorpus);
+        const numberBonus = this.computeNumberBonus(reference, ocr.hints.cardNumbers);
+        const lookupBonus =
+          structuredReference && lookupHints.length > 0
+            ? this.computeLookupBonus(searchable, lookupCorpus)
+            : 0;
 
         const score = Number(
           Math.max(
@@ -468,13 +589,13 @@ export class ScanService {
     const backTokens = new Set(tokenize(backText));
     const allInBack = playerTokens.every((token) => backTokens.has(token));
     if (allInBack) {
-      return 0.22;
+      return 0.16;
     }
 
     const fullTokens = new Set(tokenize(ocrText));
     const allInFull = playerTokens.every((token) => fullTokens.has(token));
     if (allInFull) {
-      return 0.12;
+      return 0.08;
     }
 
     return 0;
@@ -491,10 +612,10 @@ export class ScanService {
     }
 
     if (normalizedPlayer === lockedPlayer) {
-      return 0.24;
+      return 0.12;
     }
 
-    return -0.35;
+    return -0.18;
   }
 
   private computeSetBonus(
@@ -522,18 +643,17 @@ export class ScanService {
     return Number(Math.min(0.16, bonus).toFixed(3));
   }
 
-  private computeNumberBonus(metadata: Prisma.JsonValue | null | undefined, cardNumbers: string[]): number {
-    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata) || !cardNumbers.length) {
+  private computeNumberBonus(reference: CandidateReference, cardNumbers: string[]): number {
+    if (!cardNumbers.length) {
       return 0;
     }
 
-    const refNumberRaw = (metadata as Record<string, unknown>).number;
-    if (typeof refNumberRaw !== 'string' || !refNumberRaw.trim()) {
+    const referenceNumber = this.extractReferenceNumber(reference);
+    if (!referenceNumber) {
       return 0;
     }
 
-    const normalizedRefNumber = refNumberRaw.trim().toUpperCase();
-    return cardNumbers.includes(normalizedRefNumber) ? 0.3 : 0;
+    return cardNumbers.includes(referenceNumber) ? 0.3 : 0;
   }
 
   private computeLookupBonus(searchable: string, lookupCorpus: string): number {
@@ -542,7 +662,7 @@ export class ScanService {
     }
 
     const coverage = tokenCoverageScore(lookupCorpus, searchable);
-    return Number((coverage * 0.22).toFixed(3));
+    return Number((coverage * 0.12).toFixed(3));
   }
 
   private selectLookupHintsForCandidate(searchable: string, hints: SourceHint[]): SourceHint[] {
@@ -551,6 +671,7 @@ export class ScanService {
     }
 
     return hints
+      .filter((hint) => this.isLookupHintCardLike(hint))
       .filter((hint) => tokenCoverageScore(`${hint.title} ${hint.url}`, searchable) >= 0.25)
       .slice(0, 2);
   }
@@ -566,7 +687,11 @@ export class ScanService {
       .filter((hint) => Boolean(hint.url && hint.title));
   }
 
-  private async enrichSourceHintsWithPreviewImages(hints: SourceHint[]): Promise<SourceHint[]> {
+  private async enrichSourceHintsWithPreviewImages(
+    scanId: number,
+    candidateId: number,
+    hints: SourceHint[],
+  ): Promise<SourceHint[]> {
     if (!hints.length) {
       return [];
     }
@@ -583,7 +708,12 @@ export class ScanService {
 
     return hints.map((hint) => ({
       ...hint,
-      imageUrl: hint.imageUrl ?? imageByUrl.get(hint.url) ?? undefined,
+      imageUrl: this.buildHintPreviewImageUrl(
+        scanId,
+        candidateId,
+        hint,
+        hint.imageUrl ?? imageByUrl.get(hint.url) ?? undefined,
+      ),
     }));
   }
 
@@ -627,7 +757,7 @@ export class ScanService {
     const candidates: CandidateReference[] = [];
 
     for (const hint of hints) {
-      if (hint.source !== 'web_lookup' || !hint.title) {
+      if (hint.source !== 'web_lookup' || !hint.title || !this.isLookupHintCardLike(hint, lockedPlayer)) {
         continue;
       }
 
@@ -875,6 +1005,133 @@ export class ScanService {
     });
 
     return trimmed.slice(0, 8);
+  }
+
+  private filterReferencesForRanking(references: CandidateReference[]): CandidateReference[] {
+    return references.filter((reference) => this.isReferenceUsable(reference));
+  }
+
+  private isReferenceUsable(reference: CandidateReference): boolean {
+    const combined = this.referenceText(reference);
+    if (this.hasNoiseTerms(combined, [...REFERENCE_NOISE_TERMS, ...PROFILE_NOISE_TERMS])) {
+      return false;
+    }
+
+    return this.countReferenceSignals(reference) >= 2;
+  }
+
+  private countReferenceSignals(reference: CandidateReference): number {
+    const normalized = normalizeText(this.referenceText(reference));
+    const setText = normalizeText(reference.set);
+    const hasBrandSignal = CARD_BRAND_KEYWORDS.some((keyword) => normalized.includes(keyword));
+    const hasSubsetSignal = CARD_SUBSET_KEYWORDS.some((keyword) => normalized.includes(keyword));
+    const hasSetSignal =
+      Boolean(setText) &&
+      (hasBrandSignal || tokenize(setText).length >= 2 || Boolean(this.extractReferenceNumber(reference)));
+
+    return [
+      Boolean(reference.year),
+      Boolean(this.extractReferenceNumber(reference)),
+      hasSetSignal,
+      hasSubsetSignal,
+    ].filter(Boolean).length;
+  }
+
+  private isLookupHintCardLike(hint: SourceHint, lockedPlayer?: string | null): boolean {
+    const normalizedTitle = normalizeText(hint.title);
+    if (!normalizedTitle) {
+      return false;
+    }
+
+    if (lockedPlayer && !normalizedTitle.includes(lockedPlayer)) {
+      return false;
+    }
+
+    if (this.isKnownProfileDomain(hint.url)) {
+      return false;
+    }
+
+    if (this.hasNoiseTerms(normalizedTitle, [...REFERENCE_NOISE_TERMS, ...PROFILE_NOISE_TERMS])) {
+      return false;
+    }
+
+    return this.countTextSignals(hint.title) >= 2;
+  }
+
+  private countTextSignals(value: string): number {
+    const normalized = normalizeText(value);
+    return [
+      /\b(19\d{2}|20\d{2})\b/.test(normalized),
+      Boolean(this.extractCardNumberFromText(value)),
+      CARD_BRAND_KEYWORDS.some((keyword) => normalized.includes(keyword)),
+      CARD_SUBSET_KEYWORDS.some((keyword) => normalized.includes(keyword)),
+    ].filter(Boolean).length;
+  }
+
+  private extractReferenceNumber(
+    reference: Pick<CandidateReference, 'name' | 'set' | 'variant' | 'metadata'>,
+  ): string | null {
+    if (reference.metadata && typeof reference.metadata === 'object' && !Array.isArray(reference.metadata)) {
+      const metadataNumber = (reference.metadata as Record<string, unknown>).number;
+      if (typeof metadataNumber === 'string' && metadataNumber.trim()) {
+        return metadataNumber.trim().toUpperCase();
+      }
+    }
+
+    return this.extractCardNumberFromText([reference.name, reference.set, reference.variant].filter(Boolean).join(' '));
+  }
+
+  private extractCardNumberFromText(value: string | null | undefined): string | null {
+    if (!value) {
+      return null;
+    }
+
+    const explicitMatch = value.match(
+      /(?:card\s*(?:no|number)?\s*#?\s*|number\s*#?\s*|#\s*)([a-z]?\d{1,6}[a-z]?)/i,
+    );
+
+    if (explicitMatch?.[1]) {
+      return explicitMatch[1].toUpperCase();
+    }
+
+    return null;
+  }
+
+  private referenceText(reference: CandidateReference): string {
+    return [reference.name, reference.set, reference.variant].filter(Boolean).join(' ');
+  }
+
+  private hasNoiseTerms(value: string, terms: string[]): boolean {
+    const normalizedValue = normalizeText(value);
+    return terms.some((term) => normalizedValue.includes(term));
+  }
+
+  private isKnownProfileDomain(value: string): boolean {
+    try {
+      const hostname = new URL(value).hostname.toLowerCase();
+      return PROFILE_DOMAINS.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+    } catch {
+      return false;
+    }
+  }
+
+  private buildHintPreviewImageUrl(
+    scanId: number,
+    candidateId: number,
+    hint: SourceHint,
+    resolvedImageUrl?: string | null,
+  ): string | undefined {
+    if (!resolvedImageUrl) {
+      return undefined;
+    }
+
+    if (!this.linkPreviewService.shouldProxyPreviewImage(resolvedImageUrl)) {
+      return resolvedImageUrl;
+    }
+
+    return `/api/v1/scans/${scanId}/candidates/${candidateId}/preview-image?hintUrl=${encodeURIComponent(
+      hint.url,
+    )}`;
   }
 
 }

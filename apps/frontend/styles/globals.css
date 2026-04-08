@@ -1,22 +1,22 @@
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap');
 
 :root {
-  --bg: #f6f0e8;
-  --bg-strong: #fffaf3;
-  --surface: rgba(255, 251, 245, 0.74);
-  --surface-strong: rgba(255, 251, 245, 0.92);
-  --surface-soft: rgba(110, 72, 34, 0.06);
-  --border: rgba(62, 39, 20, 0.14);
-  --border-strong: rgba(62, 39, 20, 0.24);
-  --text: #201813;
-  --muted: #6d5d4e;
-  --accent: #a13d2d;
-  --accent-strong: #7f281c;
-  --accent-soft: rgba(161, 61, 45, 0.12);
-  --success: #0f6d54;
-  --success-soft: rgba(15, 109, 84, 0.13);
-  --danger: #b33b2f;
-  --danger-soft: rgba(179, 59, 47, 0.12);
+  --bg: #0c1821;
+  --bg-strong: #02070B;
+  --surface: #CCC9DC;
+  --surface-strong: #a09faa;
+  --surface-soft: #dddbea;
+  --border: #1B2A41;
+  --border-strong: #121d2d;
+  --text: #324A5F;
+  --muted: #535353;
+  --accent: #d26969;
+  --accent-strong: #d55c5c;
+  --accent-soft: #e4aaaa;
+  --success: #378b34;
+  --success-soft: #ACE4AA;
+  --danger: #800E13;
+  --danger-soft: #940d14;
   --shadow: 0 20px 60px rgba(73, 49, 28, 0.09);
   --radius-xl: 32px;
   --radius-lg: 24px;
@@ -71,8 +71,9 @@ img {
   top: 0;
   z-index: 20;
   backdrop-filter: blur(18px);
-  background: rgba(251, 247, 241, 0.82);
-  border-bottom: 1px solid rgba(62, 39, 20, 0.08);
+  background: #95B2B0;
+  border-bottom: 1px solid #426E69;
+  border-radius: 0rem 0rem 2.5rem 2.5rem;
 }
 
 .site-header__inner,
