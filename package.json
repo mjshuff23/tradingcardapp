@@ -24,6 +24,12 @@
   "workspaces": [
     "apps/*"
   ],
+  "overrides": {
+    "ajv": "8.18.0",
+    "lodash": "4.18.1",
+    "path-to-regexp": "8.4.2",
+    "picomatch": "4.0.4"
+  },
   "devDependencies": {
     "turbo": "^2.0.0"
   }

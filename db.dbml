@@ -1,152 +1,174 @@
-Table users as U {
+Table users {
   id varchar [pk, note: 'UUID string']
-  username varchar(100) [not null, unique, note: 'Account name']
-  email varchar(320) [not null, unique, note: 'User email']
-  password_hash varchar(255) [not null, note: 'Argon2id/bcrypt hash only; never store plaintext passwords']
-  pfp_url varchar(2048) [note: 'Optional profile image URL; you may prefer storing an S3 object key and generating signed URLs']
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [not null, default: `now()`, note: 'Auto-update on write in application or database layer']
+  username varchar(100) [not null, unique]
+  email varchar(320) [not null, unique]
+  password_hash varchar(255) [not null]
+  pfp_url varchar(2048)
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
 }
 
-Table card_sets as CS {
+Table card_sets {
   id varchar [pk, note: 'UUID string']
-  brand varchar(100) [not null]
-  set_name varchar(150) [not null]
-  year_manufactured smallint [not null]
+  normalized_set_key varchar(500) [not null, unique]
+  brand varchar(100)
+  set_name varchar(150)
+  year_manufactured smallint
   sport varchar(50)
   season varchar(20)
-  card_condition_scale varchar(50) [note: 'Set-level condition scale reference; owned copies still store actual condition']
+  card_condition_scale varchar(50)
   card_size varchar(50)
   card_thickness_pt smallint
   country_of_origin varchar(80)
   language varchar(50)
   material varchar(50)
-  metadata jsonb [note: 'Optional set-level vendor IDs or ingestion metadata']
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [not null, default: `now()`, note: 'Auto-update on write in application or database layer']
-
-  checks {
-    `year_manufactured >= 1800 AND year_manufactured <= 2100` [name: 'chk_card_sets_year_manufactured_range']
-    `card_thickness_pt IS NULL OR card_thickness_pt >= 0` [name: 'chk_card_sets_card_thickness_pt_nonnegative']
-  }
+  metadata json
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
 
   Indexes {
-    (set_name)
     (brand)
+    (set_name)
     (year_manufactured)
-    (brand, set_name, year_manufactured) [unique]
   }
 }
 
-Table card_definitions as CD {
+Table card_definitions {
   id varchar [pk, note: 'UUID string']
-  card_set_id varchar [not null]
-  card_number varchar(30) [not null]
+  normalized_card_key varchar(600) [not null, unique]
+  card_set_id varchar
+  card_number varchar(30)
   name varchar(200) [not null]
-  category varchar(50) [note: 'Optional; consider enum later if values stabilize']
-  subcategory varchar(50) [note: 'Optional, e.g. Anime, Comics, Film']
+  player varchar(120)
+  variant varchar(120)
+  legacy_set_text varchar(255)
+  category varchar(50)
+  subcategory varchar(50)
   has_autograph_variant boolean [not null, default: false]
-  features jsonb [note: 'Optional list of features, e.g. Rookie, Holographic']
-  original_or_reprint varchar(30) [note: 'Optional; consider enum later']
+  features json
+  original_or_reprint varchar(30)
   parallel_or_variety varchar(100)
-  set_type varchar(30) [note: 'Optional; consider enum later, e.g. Base or Insert']
+  set_type varchar(30)
   insert_set_name varchar(150)
   card_type varchar(50)
   is_vintage boolean [not null, default: false]
-  metadata jsonb [note: 'Vendor IDs, scraped data, or other external metadata']
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [not null, default: `now()`, note: 'Auto-update on write in application or database layer']
+  metadata json
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
 
   Indexes {
     (card_set_id)
     (name)
-    (category)
-    (card_set_id, card_number, name) [unique]
   }
 }
 
-Table user_cards as UC {
-  id varchar [pk, note: 'UUID string']
+Table user_cards {
+  id int [pk, note: 'Shared public card ID sequence with user_wishlist']
   user_id varchar [not null]
   card_definition_id varchar [not null]
-
-  condition varchar(50) [note: 'Condition for this specific copy']
+  condition varchar(50)
   is_autographed boolean [not null, default: false]
-  autograph_format varchar(50) [note: 'Optional, e.g. On-card or Sticker']
-
-  front_image_key varchar(1024) [note: 'Optional S3 object key for front image']
-  back_image_key varchar(1024) [note: 'Optional S3 object key for back image']
-
+  autograph_format varchar(50)
+  image_url varchar(2048)
+  original_image_key varchar(1024)
+  thumbnail_image_key varchar(1024)
+  front_image_key varchar(1024)
+  back_image_key varchar(1024)
   is_for_trade boolean [not null, default: false]
   is_for_sale boolean [not null, default: false]
   asking_price_cents int
-  notes varchar(2000) [note: 'Optional notes for this copy']
-
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [not null, default: `now()`, note: 'Auto-update on write in application or database layer']
-
-  checks {
-    `asking_price_cents IS NULL OR asking_price_cents >= 0` [name: 'chk_user_cards_asking_price_cents_nonnegative']
-  }
+  notes varchar(2000)
+  grade_estimate varchar(100)
+  confidence float
+  scan_job_id int
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
 
   Indexes {
     (user_id)
     (card_definition_id)
-    (user_id, card_definition_id)
+    (scan_job_id)
   }
 }
 
-Table user_wishlist as WL {
-  id varchar [pk, note: 'UUID string']
+Table user_wishlists {
+  id int [pk, note: 'Shared public card ID sequence with user_cards']
   user_id varchar [not null]
   card_definition_id varchar [not null]
-  priority smallint [note: 'Optional interest level, e.g. 1 to 5']
-  notes varchar(2000) [note: 'Optional wishlist notes or constraints']
-  created_at timestamp [not null, default: `now()`]
-
-  checks {
-    `priority IS NULL OR (priority >= 1 AND priority <= 5)` [name: 'chk_user_wishlist_priority_range']
-  }
+  priority smallint
+  notes varchar(2000)
+  image_url varchar(2048)
+  original_image_key varchar(1024)
+  thumbnail_image_key varchar(1024)
+  grade_estimate varchar(100)
+  confidence float
+  scan_job_id int
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
 
   Indexes {
     (user_id)
-    (card_definition_id)
-    (user_id, card_definition_id) [unique]
+    (card_definition_id) [unique]
+    (scan_job_id)
   }
+}
+
+Table scan_jobs {
+  id int [pk]
+  status varchar(30) [not null]
+  source_filename varchar(255)
+  original_image_key varchar(1024)
+  thumbnail_image_key varchar(1024)
+  back_source_filename varchar(255)
+  back_original_image_key varchar(1024)
+  back_thumbnail_image_key varchar(1024)
+  ocr_text text
+  error text
+  user_id varchar
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+}
+
+Table scan_candidates {
+  id int [pk]
+  scan_job_id int [not null]
+  name varchar(200) [not null]
+  set varchar(255)
+  year int
+  player varchar(120)
+  variant varchar(120)
+  sport varchar(50)
+  score float [not null]
+  validation_score float
+  source_hints json
+  chosen boolean [not null, default: false]
+  created_at timestamp [not null]
+
+  Indexes {
+    (scan_job_id)
+  }
+}
+
+Table import_jobs {
+  id int [pk]
+  status varchar(30) [not null]
+  filename varchar(255) [not null]
+  total_rows int [not null]
+  created_count int [not null]
+  updated_count int [not null]
+  skipped_count int [not null]
+  error_count int [not null]
+  errors json
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
 }
 
 Ref: card_definitions.card_set_id > card_sets.id
-
 Ref: user_cards.user_id > users.id
 Ref: user_cards.card_definition_id > card_definitions.id
-
-Ref: user_wishlist.user_id > users.id
-Ref: user_wishlist.card_definition_id > card_definitions.id
-
-records users(id, username, email, password_hash, pfp_url, created_at, updated_at) {
-  'u_alex', 'Alex', 'alex@example.com', '$argon2id$v=19$m=65536,t=3,p=1$...$...', null, '2026-04-08T12:00:00Z', '2026-04-08T12:05:00Z'
-  'u_bailey', 'Bailey', 'bailey@example.com', '$argon2id$v=19$m=65536,t=3,p=1$...$...', 'https://cdn.example.com/pfps/u_bailey.jpg', '2026-04-08T12:00:00Z', '2026-04-08T12:05:00Z'
-}
-
-records card_sets(id, brand, set_name, year_manufactured, sport, season, card_condition_scale, card_size, card_thickness_pt, country_of_origin, language, material, metadata, created_at, updated_at) {
-  'cs_topps_9697', 'Topps', '1996-97 Topps', 1996, 'Basketball', '1996-97', 'TCG', 'Standard', 35, 'USA', 'English', 'Cardstock', '{"source":"seed","setExternalId":"topps-1996-97"}', '2026-04-08T12:00:00Z', '2026-04-08T12:05:00Z'
-  'cs_udcc_9697', 'Upper Deck', '1996-97 Collector\'s Choice', 1996, 'Basketball', '1996-97', 'TCG', 'Standard', 35, 'USA', 'English', 'Cardstock', '{"source":"seed","setExternalId":"upper-deck-collectors-choice-1996-97"}', '2026-04-08T12:00:00Z', '2026-04-08T12:05:00Z'
-}
-
-records card_definitions(id, card_set_id, card_number, name, category, subcategory, has_autograph_variant, features, original_or_reprint, parallel_or_variety, set_type, insert_set_name, card_type, is_vintage, metadata, created_at, updated_at) {
-  'c_mj_23', 'cs_topps_9697', '23', 'Michael Jordan', 'Sports', null, true, '["Base"]', 'Original', null, 'Base', null, 'Trading Card', false, '{"source":"seed","externalId":"mj-23"}', '2026-04-08T12:00:00Z', '2026-04-08T12:05:00Z'
-  'c_mj_45', 'cs_topps_9697', '45', 'Michael Jordan', 'Sports', null, true, '["Base"]', 'Original', null, 'Base', null, 'Trading Card', false, '{"source":"seed","externalId":"mj-45"}', '2026-04-08T12:00:00Z', '2026-04-08T12:05:00Z'
-  'c_kb_8', 'cs_udcc_9697', '8', 'Kobe Bryant', 'Sports', null, true, '["Rookie"]', 'Original', null, 'Base', null, 'Trading Card', false, '{"source":"seed","externalId":"kb-8"}', '2026-04-08T12:00:00Z', '2026-04-08T12:05:00Z'
-}
-
-records user_cards(id, user_id, card_definition_id, condition, is_autographed, autograph_format, front_image_key, back_image_key, is_for_trade, is_for_sale, asking_price_cents, notes, created_at, updated_at) {
-  'uc_1', 'u_alex', 'c_mj_23', 'Near Mint', false, null, 'cards/u_alex/uc_1/front.jpg', 'cards/u_alex/uc_1/back.jpg', true, false, null, 'Duplicate for trade', '2026-04-08T12:00:00Z', '2026-04-08T12:05:00Z'
-  'uc_2', 'u_alex', 'c_mj_23', 'Good', true, 'On-card', 'cards/u_alex/uc_2/front.jpg', null, false, true, 1500, 'Signed in-person', '2026-04-08T12:00:00Z', '2026-04-08T12:05:00Z'
-  'uc_3', 'u_bailey', 'c_mj_23', 'Mint', false, null, 'cards/u_bailey/uc_3/front.jpg', 'cards/u_bailey/uc_3/back.jpg', false, false, null, null, '2026-04-08T12:00:00Z', '2026-04-08T12:05:00Z'
-  'uc_4', 'u_bailey', 'c_kb_8', 'Near Mint', false, null, null, null, false, false, null, 'Need to upload photos', '2026-04-08T12:00:00Z', '2026-04-08T12:05:00Z'
-}
-
-records user_wishlist(id, user_id, card_definition_id, priority, notes, created_at) {
-  'wl_1', 'u_alex', 'c_kb_8', 5, 'Looking for PSA 9+', '2026-04-08T12:00:00Z'
-  'wl_2', 'u_bailey', 'c_mj_45', 4, 'Missing from binder', '2026-04-08T12:00:00Z'
-}
+Ref: user_cards.scan_job_id > scan_jobs.id
+Ref: user_wishlists.user_id > users.id
+Ref: user_wishlists.card_definition_id > card_definitions.id
+Ref: user_wishlists.scan_job_id > scan_jobs.id
+Ref: scan_jobs.user_id > users.id
+Ref: scan_candidates.scan_job_id > scan_jobs.id

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CatalogModule } from '../catalog/catalog.module';
 import { OcrService } from '../ocr/ocr.service';
 import { StorageService } from '../storage/storage.service';
 import { ValidationService } from '../validation/validation.service';
@@ -8,6 +9,7 @@ import { LinkPreviewService } from './link-preview.service';
 import { ScanService } from './scan.service';
 
 @Module({
+  imports: [CatalogModule],
   controllers: [ScanController],
   providers: [
     ScanService,

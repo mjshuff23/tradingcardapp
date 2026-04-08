@@ -3,6 +3,7 @@
 Backend API for scan jobs, catalog, and CSV imports.
 
 ## Modules
+
 - `src/health/*`: `GET /health`
 - `src/scan/*`: upload scan image, process candidates, confirm card
 - `src/catalog/*`: list/get/update cards
@@ -13,25 +14,31 @@ Backend API for scan jobs, catalog, and CSV imports.
 - `src/prisma/*`: Prisma service/module
 
 ## API Base
+
 Global prefix: `/api/v1` (except `/health`)
 
 Swagger UI:
+
 - `GET /api/docs`
 
 ### Scan endpoints
+
 - `POST /api/v1/scans` (multipart fields: `image` required, `backImage` optional)
 - `GET /api/v1/scans/:scanId`
 - `POST /api/v1/scans/:scanId/confirm`
 
 ### Catalog endpoints
+
 - `GET /api/v1/cards?q=&collectionStatus=OWNED|WANTED&page=1&pageSize=25`
 - `GET /api/v1/cards/:cardId`
 - `PATCH /api/v1/cards/:cardId`
 
 ### Import endpoint
+
 - `POST /api/v1/import/cards/csv` (multipart field: `file`)
 
 CSV columns accepted:
+
 - `name` or `card` (required)
 - `set`
 - `year`
@@ -43,30 +50,42 @@ CSV columns accepted:
 - `imageUrl` or `image_url` (optional: remote image is downloaded and stored in Garage/S3)
 
 ## Data Model
+
 Prisma entities now include:
-- `Card` (+ collection status, confidence, scan linkage, image keys)
+
+- `User`
+- `CardSet`
+- `CardDefinition`
+- `UserCard`
+- `UserWishlist`
 - `ScanJob`
 - `ScanCandidate`
 - `ImportJob`
 
 Enums:
+
 - `CollectionStatus`: `OWNED | WANTED`
 - `ScanStatus`: `QUEUED | PROCESSING | NEEDS_REVIEW | CONFIRMED | FAILED`
 - `ImportStatus`: `QUEUED | PROCESSING | COMPLETED | FAILED`
 
 ## Matching Inputs
+
 Scan ranking uses:
+
 - OCR text (front + optional back)
 - web lookup hints (DuckDuckGo by default)
-- existing `Card` rows as a growing local reference set
+- existing `CardDefinition` rows as a growing local reference set
 
 ## Environment
+
 Loaded by `@nestjs/config` from:
+
 - `.env`
 - `.env.local`
 - `.env.{NODE_ENV}`
 
 Key variables:
+
 - `PORT` (default `3001`)
 - `DATABASE_URL`
 - `CORS_ORIGIN`
@@ -77,6 +96,7 @@ Key variables:
 - `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION`
 
 ## Run
+
 From repo root:
 
 ```bash
@@ -84,22 +104,31 @@ npm run dev -w apps/backend
 ```
 
 ## Quick Manual Test
+
 1. Start infra:
+
 ```bash
 npm run infra:up
 ```
+
 2. Run backend:
+
 ```bash
 npm run dev -w apps/backend
 ```
+
 3. Open docs:
+
 - `http://localhost:3001/api/docs`
+
 4. Verify health:
+
 ```bash
 curl http://localhost:3001/health
 ```
 
 ## Prisma
+
 ```bash
 npm exec -w apps/backend prisma generate
 npm exec -w apps/backend prisma migrate dev
@@ -108,23 +137,32 @@ npm exec -w apps/backend prisma migrate dev
 Hosted bootstrap / seed:
 
 ```bash
-npm run db:push -w apps/backend
+npm run db:migrate -w apps/backend
 npm run db:seed -w apps/backend
 ```
 
-Seed cards live in `apps/backend/prisma/seed-data/cards.json`.
-Optional seed images can be placed in `apps/backend/prisma/seed-assets/` and referenced via `imagePath`.
+Legacy card export to normalized seed data:
+
+```bash
+npm run db:export:catalog -w apps/backend
+```
+
+Normalized seed data lives in `apps/backend/prisma/seed-data/catalog.json`.
+Optional seed images can be placed in `apps/backend/prisma/seed-assets/` and referenced via `seedImagePath`.
 
 ## Tests
+
 ```bash
 npm run test -w apps/backend
 npm run typecheck -w apps/backend
 ```
 
 ## Current MVP Caveat
+
 `OcrService` is intentionally replaceable. It now uses Tesseract with light image preprocessing and falls back to filename-based text if OCR fails. You can force fallback mode with `OCR_PROVIDER=stub`.
 
 Current OCR/matching behavior:
+
 - OCR runs multi-pass (multiple preprocessing variants + region crops).
 - When a back image is provided, extracted back text is prioritized for structured hints.
 - Structured hints extracted: `year`, `card number`, `brand`.

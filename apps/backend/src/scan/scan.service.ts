@@ -16,6 +16,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { OcrService } from '../ocr/ocr.service';
 import { StorageService } from '../storage/storage.service';
 import { ValidationService } from '../validation/validation.service';
+import { CatalogIndexService } from '../catalog/catalog-index.service';
 import { ConfirmScanDto } from './dto/confirm-scan.dto';
 import { LinkPreviewService } from './link-preview.service';
 
@@ -102,6 +103,7 @@ export class ScanService {
     private readonly validationService: ValidationService,
     private readonly lookupService: LookupService,
     private readonly linkPreviewService: LinkPreviewService,
+    private readonly catalogIndexService: CatalogIndexService,
   ) {}
 
   async createScan(params: { frontFile?: UploadedFile; backFile?: UploadedFile }) {
@@ -287,6 +289,12 @@ export class ScanService {
       throw new BadRequestException('Card name is required when confirming a scan.');
     }
 
+    const user = await this.catalogIndexService.ensureDefaultLocalUser();
+    const { cardDefinition } = await this.catalogIndexService.upsertCatalogNodes(merged);
+    const confidence = Number(
+      ((selectedCandidate.score + (selectedCandidate.validationScore ?? 0)) / 2).toFixed(3),
+    );
+
     await this.prisma.scanCandidate.updateMany({
       where: { scanJobId: scanId },
       data: { chosen: false },
@@ -297,31 +305,50 @@ export class ScanService {
       data: { chosen: true },
     });
 
-    const card = await this.prisma.card.create({
-      data: {
-        name: merged.name,
-        set: merged.set,
-        year: merged.year,
-        player: merged.player,
-        variant: merged.variant,
-        sport: merged.sport,
-        imageUrl: scanJob.thumbnailImageKey ?? scanJob.originalImageKey,
-        originalImageKey: scanJob.originalImageKey,
-        thumbnailImageKey: scanJob.thumbnailImageKey,
-        confidence: Number(
-          ((selectedCandidate.score + (selectedCandidate.validationScore ?? 0)) / 2).toFixed(3),
-        ),
-        collectionStatus: dto.collectionStatus ?? CollectionStatus.OWNED,
-        scanJobId: scanJob.id,
-      },
-    });
+    const record =
+      (dto.collectionStatus ?? CollectionStatus.OWNED) === CollectionStatus.WANTED
+        ? await this.prisma.userWishlist.upsert({
+            where: {
+              userId_cardDefinitionId: {
+                userId: user.id,
+                cardDefinitionId: cardDefinition.id,
+              },
+            },
+            update: {
+              imageUrl: scanJob.thumbnailImageKey ?? scanJob.originalImageKey,
+              originalImageKey: scanJob.originalImageKey,
+              thumbnailImageKey: scanJob.thumbnailImageKey,
+              confidence,
+              scanJobId: scanJob.id,
+            },
+            create: {
+              userId: user.id,
+              cardDefinitionId: cardDefinition.id,
+              imageUrl: scanJob.thumbnailImageKey ?? scanJob.originalImageKey,
+              originalImageKey: scanJob.originalImageKey,
+              thumbnailImageKey: scanJob.thumbnailImageKey,
+              confidence,
+              scanJobId: scanJob.id,
+            },
+          })
+        : await this.prisma.userCard.create({
+            data: {
+              userId: user.id,
+              cardDefinitionId: cardDefinition.id,
+              imageUrl: scanJob.thumbnailImageKey ?? scanJob.originalImageKey,
+              originalImageKey: scanJob.originalImageKey,
+              thumbnailImageKey: scanJob.thumbnailImageKey,
+              confidence,
+              scanJobId: scanJob.id,
+            },
+          });
 
     await this.prisma.scanJob.update({
       where: { id: scanJob.id },
       data: { status: 'CONFIRMED' },
     });
 
-    return card;
+    return { id: record.id };
   }
 
   private async processScan(
@@ -404,29 +431,32 @@ export class ScanService {
   }
 
   private async loadCandidateReferences(): Promise<CandidateReference[]> {
-    const existingCards = await this.prisma.card.findMany({
+    const existingDefinitions = await this.prisma.cardDefinition.findMany({
+      include: {
+        cardSet: true,
+      },
       orderBy: { updatedAt: 'desc' },
       take: 1200,
     });
 
-    const catalogDerived: CandidateReference[] = existingCards.map((card) => {
+    const catalogDerived: CandidateReference[] = existingDefinitions.map((definition) => {
       const number = this.extractReferenceNumber({
-        name: card.name,
-        set: card.set,
-        variant: card.variant,
+        name: definition.name,
+        set: definition.cardSet?.setName ?? definition.legacySetText,
+        variant: definition.variant,
         metadata: null,
       });
 
       return {
-        name: card.name,
-        set: card.set,
-        year: card.year,
-        player: card.player,
-        variant: card.variant,
-        sport: card.sport,
+        name: definition.name,
+        set: definition.cardSet?.setName ?? definition.legacySetText,
+        year: definition.cardSet?.yearManufactured ?? null,
+        player: definition.player,
+        variant: definition.variant,
+        sport: definition.cardSet?.sport ?? null,
         source: 'catalog_card',
         metadata: {
-          fromCardId: card.id,
+          fromDefinitionId: definition.id,
           number,
         },
       };

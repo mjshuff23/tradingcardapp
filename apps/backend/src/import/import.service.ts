@@ -4,6 +4,7 @@ import { parseCsv } from '../common/csv.util';
 import { UploadedFile } from '../common/uploaded-file.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { CatalogIndexService } from '../catalog/catalog-index.service';
 
 type ImportError = {
   row: number;
@@ -15,6 +16,7 @@ export class ImportService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
+    private readonly catalogIndexService: CatalogIndexService,
   ) {}
 
   async importCardsCsv(file: UploadedFile) {
@@ -29,6 +31,7 @@ export class ImportService {
       },
     });
 
+    const user = await this.catalogIndexService.ensureDefaultLocalUser();
     const rows = parseCsv(file.buffer.toString('utf8'));
     let createdCount = 0;
     let updatedCount = 0;
@@ -39,8 +42,8 @@ export class ImportService {
       const rowNumber = i + 2;
       const row = rows[i];
 
-      const name = row.name || row.card || '';
-      if (!name.trim()) {
+      const name = (row.name || row.card || '').trim();
+      if (!name) {
         skippedCount += 1;
         errors.push({ row: rowNumber, message: 'Missing name/card column value.' });
         continue;
@@ -52,6 +55,7 @@ export class ImportService {
       const sport = row.sport?.trim() || null;
       const year = row.year ? Number(row.year) || null : null;
       const importImageUrl = row.imageUrl?.trim() || row.image_url?.trim() || null;
+      const gradeEstimate = row.gradeEstimate?.trim() || null;
       const collectionStatus =
         row.collectionStatus === 'WANTED' ? CollectionStatus.WANTED : CollectionStatus.OWNED;
 
@@ -60,47 +64,31 @@ export class ImportService {
           ? await this.importImageFromUrl(importImageUrl)
           : null;
 
-        const existing = await this.prisma.card.findFirst({
-          where: {
-            name: name.trim(),
-            set,
-            year,
-            player,
-            variant,
-            sport,
-          },
+        const { cardDefinition } = await this.catalogIndexService.upsertCatalogNodes({
+          name,
+          set,
+          year,
+          player,
+          variant,
+          sport,
         });
 
-        if (existing) {
-          await this.prisma.card.update({
-            where: { id: existing.id },
-            data: {
-              collectionStatus,
-              gradeEstimate: row.gradeEstimate || existing.gradeEstimate,
-              imageUrl: importedImage?.thumbnailKey ?? existing.imageUrl,
-              originalImageKey: importedImage?.originalKey ?? existing.originalImageKey,
-              thumbnailImageKey: importedImage?.thumbnailKey ?? existing.thumbnailImageKey,
-            },
-          });
-          updatedCount += 1;
-        } else {
-          await this.prisma.card.create({
-            data: {
-              name: name.trim(),
-              set,
-              year,
-              player,
-              variant,
-              sport,
-              collectionStatus,
-              gradeEstimate: row.gradeEstimate || null,
-              imageUrl: importedImage?.thumbnailKey ?? null,
-              originalImageKey: importedImage?.originalKey ?? null,
-              thumbnailImageKey: importedImage?.thumbnailKey ?? null,
-            },
-          });
-          createdCount += 1;
-        }
+        const summary = collectionStatus === CollectionStatus.WANTED
+          ? await this.upsertWishlistRecord({
+              userId: user.id,
+              cardDefinitionId: cardDefinition.id,
+              gradeEstimate,
+              importedImage,
+            })
+          : await this.upsertOwnedRecord({
+              userId: user.id,
+              cardDefinitionId: cardDefinition.id,
+              gradeEstimate,
+              importedImage,
+            });
+
+        createdCount += summary.created ? 1 : 0;
+        updatedCount += summary.created ? 0 : 1;
       } catch (error) {
         skippedCount += 1;
         errors.push({
@@ -135,6 +123,173 @@ export class ImportService {
         errorCount,
       },
     };
+  }
+
+  private async upsertOwnedRecord(input: {
+    userId: string;
+    cardDefinitionId: string;
+    gradeEstimate: string | null;
+    importedImage: { originalKey: string; thumbnailKey: string } | null;
+  }) {
+    const existingWishlist = await this.prisma.userWishlist.findUnique({
+      where: {
+        userId_cardDefinitionId: {
+          userId: input.userId,
+          cardDefinitionId: input.cardDefinitionId,
+        },
+      },
+    });
+
+    if (existingWishlist) {
+      await this.prisma.$transaction([
+        this.prisma.userCard.create({
+          data: {
+            id: existingWishlist.id,
+            userId: existingWishlist.userId,
+            cardDefinitionId: input.cardDefinitionId,
+            imageUrl: input.importedImage?.thumbnailKey ?? existingWishlist.imageUrl,
+            originalImageKey: input.importedImage?.originalKey ?? existingWishlist.originalImageKey,
+            thumbnailImageKey:
+              input.importedImage?.thumbnailKey ?? existingWishlist.thumbnailImageKey,
+            gradeEstimate: input.gradeEstimate ?? existingWishlist.gradeEstimate,
+            confidence: existingWishlist.confidence,
+            scanJobId: existingWishlist.scanJobId,
+            notes: existingWishlist.notes,
+            createdAt: existingWishlist.createdAt,
+            updatedAt: existingWishlist.updatedAt,
+          },
+        }),
+        this.prisma.userWishlist.delete({ where: { id: existingWishlist.id } }),
+      ]);
+
+      return { created: false };
+    }
+
+    const existingOwned = await this.prisma.userCard.findFirst({
+      where: {
+        userId: input.userId,
+        cardDefinitionId: input.cardDefinitionId,
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    if (existingOwned) {
+      await this.prisma.userCard.update({
+        where: { id: existingOwned.id },
+        data: {
+          imageUrl: input.importedImage?.thumbnailKey ?? existingOwned.imageUrl,
+          originalImageKey: input.importedImage?.originalKey ?? existingOwned.originalImageKey,
+          thumbnailImageKey: input.importedImage?.thumbnailKey ?? existingOwned.thumbnailImageKey,
+          gradeEstimate: input.gradeEstimate ?? existingOwned.gradeEstimate,
+        },
+      });
+
+      return { created: false };
+    }
+
+    await this.prisma.userCard.create({
+      data: {
+        userId: input.userId,
+        cardDefinitionId: input.cardDefinitionId,
+        imageUrl: input.importedImage?.thumbnailKey ?? null,
+        originalImageKey: input.importedImage?.originalKey ?? null,
+        thumbnailImageKey: input.importedImage?.thumbnailKey ?? null,
+        gradeEstimate: input.gradeEstimate,
+      },
+    });
+
+    return { created: true };
+  }
+
+  private async upsertWishlistRecord(input: {
+    userId: string;
+    cardDefinitionId: string;
+    gradeEstimate: string | null;
+    importedImage: { originalKey: string; thumbnailKey: string } | null;
+  }) {
+    const existingOwned = await this.prisma.userCard.findFirst({
+      where: {
+        userId: input.userId,
+        cardDefinitionId: input.cardDefinitionId,
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    if (existingOwned) {
+      const duplicateWishlist = await this.prisma.userWishlist.findUnique({
+        where: {
+          userId_cardDefinitionId: {
+            userId: input.userId,
+            cardDefinitionId: input.cardDefinitionId,
+          },
+        },
+      });
+
+      await this.prisma.$transaction(async (tx) => {
+        if (duplicateWishlist && duplicateWishlist.id !== existingOwned.id) {
+          await tx.userWishlist.delete({ where: { id: duplicateWishlist.id } });
+        }
+
+        await tx.userWishlist.create({
+          data: {
+            id: existingOwned.id,
+            userId: existingOwned.userId,
+            cardDefinitionId: input.cardDefinitionId,
+            imageUrl: input.importedImage?.thumbnailKey ?? existingOwned.imageUrl,
+            originalImageKey: input.importedImage?.originalKey ?? existingOwned.originalImageKey,
+            thumbnailImageKey:
+              input.importedImage?.thumbnailKey ?? existingOwned.thumbnailImageKey,
+            gradeEstimate: input.gradeEstimate ?? existingOwned.gradeEstimate,
+            confidence: existingOwned.confidence,
+            scanJobId: existingOwned.scanJobId,
+            notes: existingOwned.notes,
+            createdAt: existingOwned.createdAt,
+            updatedAt: existingOwned.updatedAt,
+          },
+        });
+
+        await tx.userCard.delete({ where: { id: existingOwned.id } });
+      });
+
+      return { created: false };
+    }
+
+    const existingWishlist = await this.prisma.userWishlist.findUnique({
+      where: {
+        userId_cardDefinitionId: {
+          userId: input.userId,
+          cardDefinitionId: input.cardDefinitionId,
+        },
+      },
+    });
+
+    if (existingWishlist) {
+      await this.prisma.userWishlist.update({
+        where: { id: existingWishlist.id },
+        data: {
+          imageUrl: input.importedImage?.thumbnailKey ?? existingWishlist.imageUrl,
+          originalImageKey: input.importedImage?.originalKey ?? existingWishlist.originalImageKey,
+          thumbnailImageKey:
+            input.importedImage?.thumbnailKey ?? existingWishlist.thumbnailImageKey,
+          gradeEstimate: input.gradeEstimate ?? existingWishlist.gradeEstimate,
+        },
+      });
+
+      return { created: false };
+    }
+
+    await this.prisma.userWishlist.create({
+      data: {
+        userId: input.userId,
+        cardDefinitionId: input.cardDefinitionId,
+        imageUrl: input.importedImage?.thumbnailKey ?? null,
+        originalImageKey: input.importedImage?.originalKey ?? null,
+        thumbnailImageKey: input.importedImage?.thumbnailKey ?? null,
+        gradeEstimate: input.gradeEstimate,
+      },
+    });
+
+    return { created: true };
   }
 
   private async importImageFromUrl(imageUrl: string) {
