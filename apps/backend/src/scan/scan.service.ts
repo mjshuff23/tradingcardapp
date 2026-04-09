@@ -4,7 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { CollectionStatus, Prisma } from '@prisma/client';
+import { CollectionStatus, Prisma } from '../prisma/client';
 import { buildCardKey } from '../common/card-key.util';
 import { StructuredCardHints } from '../common/card-hints.util';
 import { normalizeText, overlapScore, tokenize } from '../common/normalize.util';
@@ -106,7 +106,7 @@ export class ScanService {
     private readonly catalogIndexService: CatalogIndexService,
   ) {}
 
-  async createScan(params: { frontFile?: UploadedFile; backFile?: UploadedFile }) {
+  async createScan(params: { userId: string; frontFile?: UploadedFile; backFile?: UploadedFile }) {
     const frontFile = params.frontFile;
     const backFile = params.backFile;
 
@@ -123,6 +123,7 @@ export class ScanService {
 
     const scanJob = await this.prisma.scanJob.create({
       data: {
+        userId: params.userId,
         status: 'QUEUED',
         sourceFilename: frontFile.originalname,
         originalImageKey: frontStoredImage.originalKey,
@@ -146,9 +147,9 @@ export class ScanService {
     };
   }
 
-  async getScan(scanId: number) {
-    const scanJob = await this.prisma.scanJob.findUnique({
-      where: { id: scanId },
+  async getScan(scanId: number, userId: string) {
+    const scanJob = await this.prisma.scanJob.findFirst({
+      where: { id: scanId, userId },
       include: {
         candidates: {
           orderBy: [{ score: 'desc' }, { createdAt: 'asc' }],
@@ -189,10 +190,11 @@ export class ScanService {
 
   async getScanImage(
     scanId: number,
+    userId: string,
     side: 'front' | 'back',
   ): Promise<{ buffer: Buffer; contentType: string }> {
-    const scanJob = await this.prisma.scanJob.findUnique({
-      where: { id: scanId },
+    const scanJob = await this.prisma.scanJob.findFirst({
+      where: { id: scanId, userId },
       select: {
         originalImageKey: true,
         thumbnailImageKey: true,
@@ -220,6 +222,7 @@ export class ScanService {
   async getCandidatePreviewImage(
     scanId: number,
     candidateId: number,
+    userId: string,
     hintUrl: string,
   ): Promise<{ buffer: Buffer; contentType: string }> {
     if (!hintUrl.trim()) {
@@ -230,6 +233,11 @@ export class ScanService {
       where: {
         id: candidateId,
         scanJobId: scanId,
+        scanJob: {
+          is: {
+            userId,
+          },
+        },
       },
       select: {
         sourceHints: true,
@@ -253,9 +261,9 @@ export class ScanService {
     return image;
   }
 
-  async confirmScan(scanId: number, dto: ConfirmScanDto) {
-    const scanJob = await this.prisma.scanJob.findUnique({
-      where: { id: scanId },
+  async confirmScan(scanId: number, userId: string, dto: ConfirmScanDto) {
+    const scanJob = await this.prisma.scanJob.findFirst({
+      where: { id: scanId, userId },
       include: { candidates: true },
     });
 
@@ -289,7 +297,6 @@ export class ScanService {
       throw new BadRequestException('Card name is required when confirming a scan.');
     }
 
-    const user = await this.catalogIndexService.ensureDefaultLocalUser();
     const { cardDefinition } = await this.catalogIndexService.upsertCatalogNodes(merged);
     const confidence = Number(
       ((selectedCandidate.score + (selectedCandidate.validationScore ?? 0)) / 2).toFixed(3),
@@ -310,7 +317,7 @@ export class ScanService {
         ? await this.prisma.userWishlist.upsert({
             where: {
               userId_cardDefinitionId: {
-                userId: user.id,
+                userId,
                 cardDefinitionId: cardDefinition.id,
               },
             },
@@ -322,7 +329,7 @@ export class ScanService {
               scanJobId: scanJob.id,
             },
             create: {
-              userId: user.id,
+              userId,
               cardDefinitionId: cardDefinition.id,
               imageUrl: scanJob.thumbnailImageKey ?? scanJob.originalImageKey,
               originalImageKey: scanJob.originalImageKey,
@@ -333,7 +340,7 @@ export class ScanService {
           })
         : await this.prisma.userCard.create({
             data: {
-              userId: user.id,
+              userId,
               cardDefinitionId: cardDefinition.id,
               imageUrl: scanJob.thumbnailImageKey ?? scanJob.originalImageKey,
               originalImageKey: scanJob.originalImageKey,

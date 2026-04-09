@@ -6,6 +6,7 @@ import { AppShell } from '../../components/AppShell';
 import { CardImage } from '../../components/CardImage';
 import { PageHeader } from '../../components/PageHeader';
 import { StatusPill } from '../../components/StatusPill';
+import { useAuth } from '../../lib/auth-context';
 import { confirmScan, getScan, ScanResponse } from '../../lib/api';
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -32,6 +33,7 @@ function formatScanStatus(status: string): string {
 
 export default function ReviewScanPage() {
   const router = useRouter();
+  const { authenticated, loading } = useAuth();
   const scanId = useMemo(() => {
     const raw = router.query.scanId;
     if (!raw) {
@@ -48,7 +50,7 @@ export default function ReviewScanPage() {
   const [confirmed, setConfirmed] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!scanId || Number.isNaN(scanId)) {
+    if (!authenticated || !scanId || Number.isNaN(scanId)) {
       return;
     }
 
@@ -85,7 +87,7 @@ export default function ReviewScanPage() {
       stopped = true;
       clearInterval(poller);
     };
-  }, [scanId, selectedCandidateId, scan?.status]);
+  }, [authenticated, scanId, selectedCandidateId, scan?.status]);
 
   const handleConfirm = async () => {
     if (!scanId || selectedCandidateId === null) {
@@ -129,13 +131,10 @@ export default function ReviewScanPage() {
         <PageHeader
           eyebrow="Scan Review"
           title={`Review scan ${scanId ?? '...'}`}
-          description="Inspect the OCR result, compare candidates, and confirm the best match into the binder."
+          description="Inspect OCR, compare evidence, and confirm the best candidate into your private binder."
           actions={
             <div className="action-row">
-              <StatusPill
-                label={scan ? formatScanStatus(scan.status) : 'Loading'}
-                tone={statusTone}
-              />
+              <StatusPill label={scan ? formatScanStatus(scan.status) : 'Loading'} tone={statusTone} />
               <Link className="button-ghost" href="/scan">
                 Scan another
               </Link>
@@ -143,161 +142,184 @@ export default function ReviewScanPage() {
           }
         />
 
-        {error ? <p className="message message--error">{error}</p> : null}
-        {!scan ? <p className="message">Loading scan...</p> : null}
-
-        {scan ? (
+        {!loading && !authenticated ? (
+          <section className="surface gate-card">
+            <h2 className="surface-title">Sign in to review scans</h2>
+            <p className="surface-copy">
+              Scan jobs are now tied to user profiles, so guests cannot access review or confirmation flows.
+            </p>
+            <div className="action-row">
+              <Link className="button" href="/login">
+                Log in
+              </Link>
+              <Link className="button-secondary" href="/signup">
+                Create account
+              </Link>
+            </div>
+          </section>
+        ) : (
           <>
-            {scan.error ? <p className="message message--error">Error: {scan.error}</p> : null}
-            {confirmed ? (
-              <p className="message message--success">
-                Card saved (ID: {confirmed}). <Link href="/binder">Open binder</Link>
-              </p>
-            ) : null}
+            {error ? <p className="message message--error">{error}</p> : null}
+            {!scan ? <p className="message">Loading scan...</p> : null}
 
-            {(scan.status === 'PROCESSING' || scan.status === 'QUEUED') ? (
-              <section className="surface">
-                <h2 className="surface-title">Processing scan</h2>
-                <p className="surface-copy">
-                  The backend is still working through OCR and candidate lookup. This page will keep polling until the scan is ready.
-                </p>
-              </section>
-            ) : null}
+            {scan ? (
+              <>
+                {scan.error ? <p className="message message--error">Error: {scan.error}</p> : null}
+                {confirmed ? (
+                  <p className="message message--success">
+                    Card saved (ID: {confirmed}). <Link href="/binder">Open binder</Link>
+                  </p>
+                ) : null}
 
-            {(scan.frontImageUrl || scan.backImageUrl) ? (
-              <section className="surface">
-                <div className="section-header">
-                  <div>
-                    <h2>Uploaded images</h2>
-                    <p className="fine-print">Reference shots used for OCR and match lookup.</p>
-                  </div>
-                </div>
-
-                <div className="preview-grid">
-                  {scan.frontImageUrl ? (
-                    <div className="preview-frame">
-                      <h3>Front</h3>
-                      <CardImage
-                        alt="Uploaded front"
-                        src={toAbsoluteApiUrl(scan.frontImageUrl) ?? undefined}
-                      />
-                    </div>
-                  ) : null}
-
-                  {scan.backImageUrl ? (
-                    <div className="preview-frame">
-                      <h3>Back</h3>
-                      <CardImage
-                        alt="Uploaded back"
-                        src={toAbsoluteApiUrl(scan.backImageUrl) ?? undefined}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              </section>
-            ) : null}
-
-            {scan.ocrText ? (
-              <section className="surface">
-                <details>
-                  <summary>OCR debug text</summary>
-                  <p className="helper-text summary-copy">{scan.ocrText}</p>
-                </details>
-              </section>
-            ) : null}
-
-            {scan.candidates.length > 0 ? (
-              <section className="surface">
-                <div className="section-header">
-                  <div>
-                    <h2>Candidates</h2>
-                    <p className="fine-print">
-                      Pick the best match, then confirm it into the collection.
+                {(scan.status === 'PROCESSING' || scan.status === 'QUEUED') ? (
+                  <section className="surface">
+                    <h2 className="surface-title">Processing scan</h2>
+                    <p className="surface-copy">
+                      The backend is still working through OCR and candidate lookup. This page will keep polling until the scan is ready.
                     </p>
-                  </div>
-                  <button
-                    className="button"
-                    type="button"
-                    onClick={handleConfirm}
-                    disabled={busy || selectedCandidateId === null}
-                  >
-                    {busy ? 'Confirming...' : 'Confirm candidate'}
-                  </button>
-                </div>
+                  </section>
+                ) : null}
 
-                <div className="candidate-grid">
-                  {scan.candidates.map((candidate) => {
-                    const previewImageUrl = toAbsoluteApiUrl(
-                      candidate.sourceHints?.find((hint) => hint.imageUrl)?.imageUrl ?? null,
-                    );
+                {(scan.frontImageUrl || scan.backImageUrl) ? (
+                  <section className="surface">
+                    <div className="section-header">
+                      <div>
+                        <h2>Uploaded images</h2>
+                        <p className="fine-print">Reference shots used for OCR and match lookup.</p>
+                      </div>
+                    </div>
 
-                    return (
-                      <article
-                        key={candidate.id}
-                        className={`candidate-card${
-                          selectedCandidateId === candidate.id ? ' is-selected' : ''
-                        }`}
-                      >
-                        <input
-                          className="candidate-radio"
-                          type="radio"
-                          name="candidate"
-                          checked={selectedCandidateId === candidate.id}
-                          onChange={() => setSelectedCandidateId(candidate.id)}
-                        />
-
-                        <CardImage alt={`${candidate.name} preview`} src={previewImageUrl} />
-
-                        <div>
-                          <h3>
-                            {candidate.year ? `${candidate.year} ` : ''}
-                            {candidate.player ? `${candidate.player} - ` : ''}
-                            {candidate.name}
-                          </h3>
-                          <p className="helper-text">
-                            {candidate.set ? `${candidate.set}` : 'Unknown set'}
-                            {candidate.variant ? ` · ${candidate.variant}` : ''}
-                            {candidate.sport ? ` · ${candidate.sport}` : ''}
-                          </p>
-
-                          <div className="candidate-meta">
-                            <StatusPill label={`Match ${candidate.score.toFixed(3)}`} tone="accent" />
-                            <StatusPill
-                              label={`Validation ${
-                                candidate.validationScore?.toFixed(3) ?? 'n/a'
-                              }`}
-                            />
-                          </div>
-
-                          {candidate.sourceHints?.length ? (
-                            <ul className="evidence-list">
-                              {candidate.sourceHints.map((hint) => (
-                                <li key={`${candidate.id}-${hint.source}-${hint.url}`}>
-                                  <a className="subtle-link" href={hint.url} target="_blank" rel="noreferrer">
-                                    {hint.title}
-                                  </a>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="helper-text">No source evidence attached to this candidate.</p>
-                          )}
+                    <div className="preview-grid">
+                      {scan.frontImageUrl ? (
+                        <div className="preview-frame">
+                          <h3>Front</h3>
+                          <CardImage
+                            alt="Uploaded front"
+                            src={toAbsoluteApiUrl(scan.frontImageUrl) ?? undefined}
+                          />
                         </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
-            ) : (
-              <section className="surface">
-                <div className="empty-state">
-                  No candidates are available yet. If the scan failed to identify a card, try a
-                  sharper photo or include the back image.
-                </div>
-              </section>
-            )}
+                      ) : null}
+
+                      {scan.backImageUrl ? (
+                        <div className="preview-frame">
+                          <h3>Back</h3>
+                          <CardImage
+                            alt="Uploaded back"
+                            src={toAbsoluteApiUrl(scan.backImageUrl) ?? undefined}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  </section>
+                ) : null}
+
+                {scan.ocrText ? (
+                  <section className="surface">
+                    <details>
+                      <summary>OCR debug text</summary>
+                      <p className="helper-text summary-copy">{scan.ocrText}</p>
+                    </details>
+                  </section>
+                ) : null}
+
+                {scan.candidates.length > 0 ? (
+                  <section className="surface">
+                    <div className="section-header">
+                      <div>
+                        <h2>Candidates</h2>
+                        <p className="fine-print">
+                          Pick the best match, then confirm it into the collection.
+                        </p>
+                      </div>
+                      <button
+                        className="button"
+                        type="button"
+                        onClick={handleConfirm}
+                        disabled={busy || selectedCandidateId === null}
+                      >
+                        {busy ? 'Confirming...' : 'Confirm candidate'}
+                      </button>
+                    </div>
+
+                    <div className="candidate-grid">
+                      {scan.candidates.map((candidate) => {
+                        const previewImageUrl = toAbsoluteApiUrl(
+                          candidate.sourceHints?.find((hint) => hint.imageUrl)?.imageUrl ?? null,
+                        );
+
+                        return (
+                          <article
+                            key={candidate.id}
+                            className={`candidate-card${
+                              selectedCandidateId === candidate.id ? ' is-selected' : ''
+                            }`}
+                          >
+                            <input
+                              className="candidate-radio"
+                              type="radio"
+                              name="candidate"
+                              checked={selectedCandidateId === candidate.id}
+                              onChange={() => setSelectedCandidateId(candidate.id)}
+                            />
+
+                            <CardImage alt={`${candidate.name} preview`} src={previewImageUrl} />
+
+                            <div>
+                              <h3>
+                                {candidate.year ? `${candidate.year} ` : ''}
+                                {candidate.player ? `${candidate.player} · ` : ''}
+                                {candidate.name}
+                              </h3>
+                              <p className="helper-text">
+                                {candidate.set ? `${candidate.set}` : 'Unknown set'}
+                                {candidate.variant ? ` · ${candidate.variant}` : ''}
+                                {candidate.sport ? ` · ${candidate.sport}` : ''}
+                              </p>
+
+                              <div className="candidate-meta">
+                                <StatusPill label={`Match ${candidate.score.toFixed(3)}`} tone="accent" />
+                                <StatusPill
+                                  label={`Validation ${
+                                    candidate.validationScore?.toFixed(3) ?? 'n/a'
+                                  }`}
+                                />
+                                <StatusPill
+                                  label={`${candidate.sourceHints?.length ?? 0} evidence links`}
+                                  tone="neutral"
+                                />
+                              </div>
+
+                              {candidate.sourceHints?.length ? (
+                                <ul className="evidence-list">
+                                  {candidate.sourceHints.map((hint) => (
+                                    <li key={`${candidate.id}-${hint.source}-${hint.url}`}>
+                                      <a className="subtle-link" href={hint.url} target="_blank" rel="noreferrer">
+                                        {hint.title}
+                                      </a>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="helper-text">No source evidence attached to this candidate.</p>
+                              )}
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ) : (
+                  <section className="surface">
+                    <div className="empty-state">
+                      No candidates are available yet. If the scan failed to identify a card, try a
+                      sharper photo or include the back image.
+                    </div>
+                  </section>
+                )}
+              </>
+            ) : null}
           </>
-        ) : null}
+        )}
       </div>
     </AppShell>
   );

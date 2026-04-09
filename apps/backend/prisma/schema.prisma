@@ -1,10 +1,12 @@
 generator client {
-  provider = "prisma-client-js"
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  runtime      = "nodejs"
+  moduleFormat = "cjs"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum CollectionStatus {
@@ -35,9 +37,23 @@ model User {
   pfpUrl        String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+  sessions      Session[]
   scanJobs      ScanJob[]
   userCards     UserCard[]
   userWishlists UserWishlist[]
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model CardSet {
@@ -91,7 +107,7 @@ model CardDefinition {
 }
 
 model UserCard {
-  id               Int            @id @default(dbgenerated("nextval('\"CardRecordIdSeq\"'::regclass)"))
+  id               Int            @id @default(autoincrement())
   userId           String
   cardDefinitionId String
   condition        String?
@@ -121,7 +137,7 @@ model UserCard {
 }
 
 model UserWishlist {
-  id                Int            @id @default(dbgenerated("nextval('\"CardRecordIdSeq\"'::regclass)"))
+  id                Int            @id @default(autoincrement())
   userId            String
   cardDefinitionId  String
   priority          Int?           @db.SmallInt
