@@ -29,16 +29,20 @@ function main() {
           allowFailure: true,
         });
       }
-
-      // All migrations are now baselined — deploy is a no-op because every
-      // migration is already marked as applied. Use `db push` to reconcile the
-      // actual database schema with the Prisma schema, creating any tables or
-      // columns that were missing without touching existing ones.
-      runPrisma(['db', 'push', '--skip-generate']);
     } else {
       process.exit(migrateResult.status ?? 1);
     }
   }
+
+  // Always run `db push` after `migrate deploy`, regardless of whether deploy
+  // succeeded or migrations were baselined. This reconciles the actual database
+  // schema with the Prisma schema, creating any tables or columns that are
+  // missing without touching existing ones. This is necessary when all
+  // migrations are already marked as applied (baselined) but the corresponding
+  // SQL was never executed — `migrate deploy` exits 0 in that case, so `db
+  // push` is the only way to bring the schema up to date. It is idempotent and
+  // safe to run even when the schema is already in sync.
+  runPrisma(['db', 'push', '--skip-generate']);
 
   runPrisma(['db', 'seed']);
 }
