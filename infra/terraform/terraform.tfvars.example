@@ -1,0 +1,15 @@
+aws_region  = "us-east-1"
+environment = "dev"
+
+# Set explicit globally-unique names before applying in AWS.
+profile_bucket_name = "replace-me-profile-images"
+card_bucket_name    = "replace-me-card-media"
+
+cors_allowed_origins = [
+  "http://localhost:3000",
+  "https://your-frontend.example.com",
+]
+
+tags = {
+  Owner = "trading-card-app"
+}

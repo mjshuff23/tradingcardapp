@@ -30,11 +30,19 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
 .DS_Store
 Thumbs.db
 project-dump.txt
 apps/backend/.local-storage/
+apps/backend/src/generated/
 
 # IDE
 .vscode/
 .idea/
+.openmcp/

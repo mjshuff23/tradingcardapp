@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "npm@11.5.2",
+  "engines": {
+    "node": ">=22 <23",
+    "npm": ">=10 <12"
+  },
   "description": "",
   "scripts": {
     "garage:config": "node scripts/generate-garage-config.js",
@@ -15,6 +19,9 @@
     "stop:local": "npm run infra:down",
     "clean:dev-cache": "bash scripts/fix-dev-perms.sh",
     "fix:docker-node-modules": "bash scripts/fix-docker-node-modules.sh",
+    "refresh:docker:backend": "bash scripts/refresh-docker-backend.sh",
+    "infra:terraform:fmt": "terraform -chdir=infra/terraform fmt -recursive",
+    "infra:terraform:validate": "terraform -chdir=infra/terraform init -backend=false && terraform -chdir=infra/terraform validate",
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
     "start": "turbo run start",
@@ -26,7 +33,7 @@
     "apps/*"
   ],
   "dependencies": {
-    "@prisma/client": "6.19.3"
+    "@prisma/client": "7.6.0"
   },
   "overrides": {
     "ajv": "8.18.0",
@@ -35,7 +42,7 @@
     "picomatch": "4.0.4"
   },
   "devDependencies": {
-    "prisma": "6.19.3",
+    "prisma": "7.6.0",
     "turbo": "^2.0.0"
   }
 }

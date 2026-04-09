@@ -1,10 +1,11 @@
 # Backend (NestJS + Prisma)
 
-Backend API for scan jobs, catalog, and CSV imports.
+Backend API for scan jobs, catalog, auth, and CSV imports.
 
 ## Modules
 
 - `src/health/*`: `GET /health`
+- `src/auth/*`: cookie auth, session lookup, demo-user fallback
 - `src/scan/*`: upload scan image, process candidates, confirm card
 - `src/catalog/*`: list/get/update cards
 - `src/import/*`: CSV card import
@@ -27,9 +28,16 @@ Swagger UI:
 - `GET /api/v1/scans/:scanId`
 - `POST /api/v1/scans/:scanId/confirm`
 
+### Auth endpoints
+
+- `POST /api/v1/auth/signup`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/logout`
+- `GET /api/v1/auth/me`
+
 ### Catalog endpoints
 
-- `GET /api/v1/cards?q=&collectionStatus=OWNED|WANTED&page=1&pageSize=25`
+- `GET /api/v1/cards?q=&collectionStatus=OWNED|WANTED&queryMode=text|nl&page=1&pageSize=25`
 - `GET /api/v1/cards/:cardId`
 - `PATCH /api/v1/cards/:cardId`
 
@@ -89,11 +97,18 @@ Key variables:
 - `PORT` (default `3001`)
 - `DATABASE_URL`
 - `CORS_ORIGIN`
+- `NODE_ENV`
 - `OCR_PROVIDER` (`tesseract` or `stub`)
 - `OCR_LANG` (default `eng`)
 - `OCR_DEBUG` (`true` to log OCR worker progress)
 - `LOOKUP_PROVIDERS` (default `duckduckgo`; add `google_vision` only if you want cloud reverse image lookup)
-- `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_REGION`
+- `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_PROFILE_BUCKET`, `S3_CARD_BUCKET`, `S3_REGION`
+
+Auth behavior:
+
+- anonymous requests resolve to the seeded demo user for read-only binder/search/detail access
+- mutations require the `trading_card_session` HttpOnly cookie
+- cookie security is `SameSite=Lax` and `Secure` in production
 
 ## Run
 

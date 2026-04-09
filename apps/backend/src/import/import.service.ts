@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { CollectionStatus } from '@prisma/client';
+import { CollectionStatus } from '../prisma/client';
 import { parseCsv } from '../common/csv.util';
 import { UploadedFile } from '../common/uploaded-file.type';
 import { PrismaService } from '../prisma/prisma.service';
@@ -19,7 +19,7 @@ export class ImportService {
     private readonly catalogIndexService: CatalogIndexService,
   ) {}
 
-  async importCardsCsv(file: UploadedFile) {
+  async importCardsCsv(file: UploadedFile, userId: string) {
     if (!file || !file.buffer) {
       throw new BadRequestException('CSV file is required.');
     }
@@ -31,7 +31,6 @@ export class ImportService {
       },
     });
 
-    const user = await this.catalogIndexService.ensureDefaultLocalUser();
     const rows = parseCsv(file.buffer.toString('utf8'));
     let createdCount = 0;
     let updatedCount = 0;
@@ -75,13 +74,13 @@ export class ImportService {
 
         const summary = collectionStatus === CollectionStatus.WANTED
           ? await this.upsertWishlistRecord({
-              userId: user.id,
+              userId,
               cardDefinitionId: cardDefinition.id,
               gradeEstimate,
               importedImage,
             })
           : await this.upsertOwnedRecord({
-              userId: user.id,
+              userId,
               cardDefinitionId: cardDefinition.id,
               gradeEstimate,
               importedImage,

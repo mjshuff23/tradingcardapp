@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  DEFAULT_LOCAL_USER,
   CatalogDraftInput,
   deriveCatalogDraft,
   normalizeNullableText,
@@ -10,19 +9,6 @@ import {
 @Injectable()
 export class CatalogIndexService {
   constructor(private readonly prisma: PrismaService) {}
-
-  async ensureDefaultLocalUser() {
-    return this.prisma.user.upsert({
-      where: { id: DEFAULT_LOCAL_USER.id },
-      update: {
-        username: DEFAULT_LOCAL_USER.username,
-        email: DEFAULT_LOCAL_USER.email,
-        passwordHash: DEFAULT_LOCAL_USER.passwordHash,
-        pfpUrl: DEFAULT_LOCAL_USER.pfpUrl,
-      },
-      create: DEFAULT_LOCAL_USER,
-    });
-  }
 
   async upsertCatalogNodes(input: CatalogDraftInput) {
     const draft = deriveCatalogDraft(input);
@@ -36,6 +22,7 @@ export class CatalogIndexService {
             yearManufactured: draft.yearManufactured ?? undefined,
             sport: draft.sport ?? undefined,
             season: draft.season ?? undefined,
+            metadata: undefined,
           },
           create: {
             normalizedSetKey: draft.normalizedSetKey,
@@ -57,6 +44,15 @@ export class CatalogIndexService {
         player: draft.player ?? undefined,
         variant: draft.variant ?? undefined,
         legacySetText: normalizeNullableText(input.set) ?? undefined,
+        category: draft.category ?? undefined,
+        subcategory: draft.subcategory ?? undefined,
+        hasAutographVariant: draft.hasAutographVariant,
+        originalOrReprint: draft.originalOrReprint ?? undefined,
+        parallelOrVariety: draft.parallelOrVariety ?? undefined,
+        setType: draft.setType ?? undefined,
+        insertSetName: draft.insertSetName ?? undefined,
+        cardType: draft.cardType ?? undefined,
+        isVintage: draft.isVintage,
       },
       create: {
         normalizedCardKey: draft.normalizedCardKey,
@@ -66,6 +62,15 @@ export class CatalogIndexService {
         player: draft.player,
         variant: draft.variant,
         legacySetText: normalizeNullableText(input.set),
+        category: draft.category,
+        subcategory: draft.subcategory,
+        hasAutographVariant: draft.hasAutographVariant,
+        originalOrReprint: draft.originalOrReprint,
+        parallelOrVariety: draft.parallelOrVariety,
+        setType: draft.setType,
+        insertSetName: draft.insertSetName,
+        cardType: draft.cardType,
+        isVintage: draft.isVintage,
       },
     });
 
