@@ -13,6 +13,28 @@ import {
 import { ThemedSelect, ThemedSelectOption } from '../../../components/ThemedSelect';
 import { useAuth } from '../../../lib/auth-context';
 import {
+  actionRowClass,
+  checkboxInputClass,
+  checkboxRowClass,
+  cn,
+  fieldClass,
+  fieldGridClass,
+  fieldLabelClass,
+  finePrintClass,
+  ghostButtonClass,
+  inputClass,
+  messageClass,
+  pageStackClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  sectionHeaderClass,
+  softSurfaceClass,
+  surfaceClass,
+  surfaceCopyClass,
+  surfaceTitleClass,
+  textareaClass,
+} from '../../../lib/ui';
+import {
   CardTaxonomy,
   CollectionStatus,
   EnrichScanCandidateResult,
@@ -639,14 +661,14 @@ export default function FinalizeScanPage() {
         <title>Finalize Scan | Trading Card App</title>
       </Head>
 
-      <div className="stack fade-up">
+      <div className={pageStackClass}>
         <PageHeader
           eyebrow="Finalize Scan"
           title={selectedCandidate ? `Finalize ${selectedCandidate.name}` : 'Finalize selected candidate'}
           description="Review the best match, clean up any missing fields, and choose how the first saved card should carry its images."
           actions={
-            <div className="action-row">
-              <Link className="button-ghost" href={scanId ? `/review/${scanId}` : '/review'}>
+            <div className={actionRowClass}>
+              <Link className={ghostButtonClass} href={scanId ? `/review/${scanId}` : '/review'}>
                 Back to review
               </Link>
             </div>
@@ -654,29 +676,34 @@ export default function FinalizeScanPage() {
         />
 
         {!loading && !authenticated ? (
-          <section className="surface gate-card">
-            <h2 className="surface-title">Sign in to finalize scans</h2>
-            <p className="surface-copy">
+          <section
+            className={cn(
+              surfaceClass,
+              'bg-[linear-gradient(145deg,rgba(66,110,105,0.12),transparent_65%),var(--surface)] p-6 sm:p-8',
+            )}
+          >
+            <h2 className={surfaceTitleClass}>Sign in to finalize scans</h2>
+            <p className={cn(surfaceCopyClass, 'mt-3')}>
               Finalizing a scan creates or updates a real record in your collection, so this step is only available to signed-in collectors.
             </p>
-            <div className="action-row">
-              <Link className="button" href="/login">
+            <div className={cn(actionRowClass, 'mt-5')}>
+              <Link className={primaryButtonClass} href="/login">
                 Log in
               </Link>
-              <Link className="button-secondary" href="/signup">
+              <Link className={secondaryButtonClass} href="/signup">
                 Create account
               </Link>
             </div>
           </section>
         ) : null}
 
-        {loadingState ? <p className="message">Loading selected candidate...</p> : null}
-        {error ? <p className="message message--error">{error}</p> : null}
-        {parserMessage ? <p className="message">{parserMessage}</p> : null}
-        {enrichmentMessage ? <p className="message">{enrichmentMessage}</p> : null}
+        {loadingState ? <p className={messageClass()}>Loading selected candidate...</p> : null}
+        {error ? <p className={messageClass('error')}>{error}</p> : null}
+        {parserMessage ? <p className={messageClass()}>{parserMessage}</p> : null}
+        {enrichmentMessage ? <p className={messageClass()}>{enrichmentMessage}</p> : null}
 
         {scan && selectedCandidate && form ? (
-          <form className="stack" onSubmit={handleSubmit}>
+          <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
             {pendingSuggestion ? (
               <SuggestionPreview
                 title="Suggestion preview"
@@ -710,24 +737,26 @@ export default function FinalizeScanPage() {
             ) : null}
 
             {(scan.frontImageUrl || scan.backImageUrl) ? (
-              <section className="surface">
-                <div className="section-header">
+              <section className={cn(surfaceClass, 'p-6 sm:p-8')}>
+                <div className={sectionHeaderClass}>
                   <div>
-                    <h2>Scan images</h2>
-                    <p className="fine-print">These become the first personal images if you keep them during save.</p>
+                    <h2 className={surfaceTitleClass}>Scan images</h2>
+                    <p className={cn(finePrintClass, 'mt-2')}>
+                      These become the first personal images if you keep them during save.
+                    </p>
                   </div>
                 </div>
 
-                <div className="preview-grid">
+                <div className="mt-6 grid gap-4 sm:grid-cols-2">
                   {scan.frontImageUrl ? (
-                    <div className="preview-frame">
-                      <h3>Front</h3>
+                    <div className={cn(softSurfaceClass, 'p-4')}>
+                      <h3 className={fieldLabelClass}>Front</h3>
                       <CardImage alt="Uploaded front" src={toAbsoluteApiUrl(scan.frontImageUrl) ?? undefined} />
                     </div>
                   ) : null}
                   {scan.backImageUrl ? (
-                    <div className="preview-frame">
-                      <h3>Back</h3>
+                    <div className={cn(softSurfaceClass, 'p-4')}>
+                      <h3 className={fieldLabelClass}>Back</h3>
                       <CardImage alt="Uploaded back" src={toAbsoluteApiUrl(scan.backImageUrl) ?? undefined} />
                     </div>
                   ) : null}
@@ -735,15 +764,18 @@ export default function FinalizeScanPage() {
               </section>
             ) : null}
 
-            <section className="surface">
-              <div className="section-header">
+            <section className={cn(surfaceClass, 'p-6 sm:p-8')}>
+              <div className={sectionHeaderClass}>
                 <div>
-                  <h2>Cleanup assistant</h2>
-                  <p className="fine-print">Use the parser now so the first saved record starts cleaner than the raw OCR/candidate text.</p>
+                  <h2 className={surfaceTitleClass}>Cleanup assistant</h2>
+                  <p className={cn(finePrintClass, 'mt-2')}>
+                    Use the parser now so the first saved record starts cleaner than the raw
+                    OCR/candidate text.
+                  </p>
                 </div>
-                <div className="action-row">
+                <div className={actionRowClass}>
                   <button
-                    className="button-secondary"
+                    className={secondaryButtonClass}
                     type="button"
                     onClick={() => void handleNormalize()}
                     disabled={normalizing}
@@ -751,7 +783,7 @@ export default function FinalizeScanPage() {
                     {normalizing ? 'Refreshing...' : 'Suggest fields'}
                   </button>
                   <button
-                    className="button-secondary"
+                    className={secondaryButtonClass}
                     type="button"
                     onClick={() => void runWebEnrichment(form, selectedCandidate)}
                     disabled={enriching}
@@ -761,10 +793,13 @@ export default function FinalizeScanPage() {
                 </div>
               </div>
 
-              <div className="field-grid">
-                <div className="field field--full">
-                  <label htmlFor="rawTitle">Raw title to parse</label>
+              <div className={cn(fieldGridClass, 'mt-6')}>
+                <div className={cn(fieldClass, 'md:col-span-2 xl:col-span-3')}>
+                  <label className={fieldLabelClass} htmlFor="rawTitle">
+                    Raw title to parse
+                  </label>
                   <input
+                    className={inputClass}
                     id="rawTitle"
                     value={form.rawTitle}
                     onChange={(event) => setForm({ ...form, rawTitle: event.target.value })}
@@ -773,58 +808,133 @@ export default function FinalizeScanPage() {
               </div>
             </section>
 
-            <section className="surface">
-              <div className="section-header">
+            <section className={cn(surfaceClass, 'p-6 sm:p-8')}>
+              <div className={sectionHeaderClass}>
                 <div>
-                  <h2>Definition fields</h2>
-                  <p className="fine-print">What card this is, independent of your copy.</p>
+                  <h2 className={surfaceTitleClass}>Definition fields</h2>
+                  <p className={cn(finePrintClass, 'mt-2')}>
+                    What card this is, independent of your copy.
+                  </p>
                 </div>
                 <StatusPill label={`Match ${selectedCandidate.score.toFixed(3)}`} tone="accent" />
               </div>
 
-              <div className="field-grid field-grid--three">
-                <div className="field">
-                  <label htmlFor="name">Card name</label>
-                  <input id="name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
+              <div className={cn(fieldGridClass, 'mt-6')}>
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="name">
+                    Card name
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="name"
+                    value={form.name}
+                    onChange={(event) => setForm({ ...form, name: event.target.value })}
+                    required
+                  />
                 </div>
-                <div className="field">
-                  <label htmlFor="player">Player</label>
-                  <input id="player" value={form.player} onChange={(event) => setForm({ ...form, player: event.target.value })} />
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="player">
+                    Player
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="player"
+                    value={form.player}
+                    onChange={(event) => setForm({ ...form, player: event.target.value })}
+                  />
                 </div>
-                <div className="field">
-                  <label htmlFor="variant">Variant</label>
-                  <input id="variant" value={form.variant} onChange={(event) => setForm({ ...form, variant: event.target.value })} />
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="variant">
+                    Variant
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="variant"
+                    value={form.variant}
+                    onChange={(event) => setForm({ ...form, variant: event.target.value })}
+                  />
                 </div>
-                <div className="field">
-                  <label htmlFor="set">Legacy set text</label>
-                  <input id="set" value={form.set} onChange={(event) => setForm({ ...form, set: event.target.value })} />
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="set">
+                    Legacy set text
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="set"
+                    value={form.set}
+                    onChange={(event) => setForm({ ...form, set: event.target.value })}
+                  />
                 </div>
-                <div className="field">
-                  <label htmlFor="setName">Set name</label>
-                  <input id="setName" value={form.setName} onChange={(event) => setForm({ ...form, setName: event.target.value })} />
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="setName">
+                    Set name
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="setName"
+                    value={form.setName}
+                    onChange={(event) => setForm({ ...form, setName: event.target.value })}
+                  />
                 </div>
-                <div className="field">
-                  <label htmlFor="brand">Brand</label>
-                  <input id="brand" value={form.brand} onChange={(event) => setForm({ ...form, brand: event.target.value })} />
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="brand">
+                    Brand
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="brand"
+                    value={form.brand}
+                    onChange={(event) => setForm({ ...form, brand: event.target.value })}
+                  />
                 </div>
-                <div className="field">
-                  <label htmlFor="year">Year</label>
-                  <input id="year" value={form.year} onChange={(event) => setForm({ ...form, year: event.target.value })} />
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="year">
+                    Year
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="year"
+                    value={form.year}
+                    onChange={(event) => setForm({ ...form, year: event.target.value })}
+                  />
                 </div>
-                <div className="field">
-                  <label htmlFor="season">Season</label>
-                  <input id="season" value={form.season} onChange={(event) => setForm({ ...form, season: event.target.value })} />
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="season">
+                    Season
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="season"
+                    value={form.season}
+                    onChange={(event) => setForm({ ...form, season: event.target.value })}
+                  />
                 </div>
-                <div className="field">
-                  <label htmlFor="cardNumber">Card number</label>
-                  <input id="cardNumber" value={form.cardNumber} onChange={(event) => setForm({ ...form, cardNumber: event.target.value })} />
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="cardNumber">
+                    Card number
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="cardNumber"
+                    value={form.cardNumber}
+                    onChange={(event) => setForm({ ...form, cardNumber: event.target.value })}
+                  />
                 </div>
-                <div className="field">
-                  <label htmlFor="sport">Sport</label>
-                  <input id="sport" value={form.sport} onChange={(event) => setForm({ ...form, sport: event.target.value })} />
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="sport">
+                    Sport
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="sport"
+                    value={form.sport}
+                    onChange={(event) => setForm({ ...form, sport: event.target.value })}
+                  />
                 </div>
-                <div className="field">
-                  <label htmlFor="category">Category</label>
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="category">
+                    Category
+                  </label>
                   <ThemedSelect
                     value={form.category}
                     onChange={(nextValue) =>
@@ -839,8 +949,10 @@ export default function FinalizeScanPage() {
                     options={toSelectOptions(categoryOptions, form.category)}
                   />
                 </div>
-                <div className="field">
-                  <label htmlFor="subcategory">Subcategory</label>
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="subcategory">
+                    Subcategory
+                  </label>
                   <ThemedSelect
                     value={form.subcategory}
                     onChange={(nextValue) => setForm({ ...form, subcategory: nextValue })}
@@ -851,35 +963,53 @@ export default function FinalizeScanPage() {
                 </div>
               </div>
 
-              <div className="toggle-row">
-                <label className="checkbox">
-                  <input type="checkbox" checked={form.hasAutographVariant} onChange={(event) => setForm({ ...form, hasAutographVariant: event.target.checked })} />
-                  <span>Autograph variant exists</span>
+              <div className={cn(actionRowClass, 'mt-6')}>
+                <label className={cn(checkboxRowClass, 'cursor-pointer')}>
+                  <input
+                    className={checkboxInputClass}
+                    type="checkbox"
+                    checked={form.hasAutographVariant}
+                    onChange={(event) =>
+                      setForm({ ...form, hasAutographVariant: event.target.checked })
+                    }
+                  />
+                  <span className="text-sm font-medium text-[var(--text)]">
+                    Autograph variant exists
+                  </span>
                 </label>
-                <label className="checkbox">
-                  <input type="checkbox" checked={form.isVintage} onChange={(event) => setForm({ ...form, isVintage: event.target.checked })} />
-                  <span>Vintage card</span>
+                <label className={cn(checkboxRowClass, 'cursor-pointer')}>
+                  <input
+                    className={checkboxInputClass}
+                    type="checkbox"
+                    checked={form.isVintage}
+                    onChange={(event) => setForm({ ...form, isVintage: event.target.checked })}
+                  />
+                  <span className="text-sm font-medium text-[var(--text)]">Vintage card</span>
                 </label>
               </div>
             </section>
 
-            <section className="surface">
-              <div className="section-header">
+            <section className={cn(surfaceClass, 'p-6 sm:p-8')}>
+              <div className={sectionHeaderClass}>
                 <div>
-                  <h2>Collection fields</h2>
-                  <p className="fine-print">What is true about your record right now.</p>
+                  <h2 className={surfaceTitleClass}>Collection fields</h2>
+                  <p className={cn(finePrintClass, 'mt-2')}>
+                    What is true about your record right now.
+                  </p>
                 </div>
               </div>
 
               {isWanted ? (
-                <p className="message">
+                <p className={cn(messageClass(), 'mt-6')}>
                   Wanted cards keep wishlist priority and notes active. Copy-specific fields like condition, grade, autograph state, and sale/trade controls are disabled.
                 </p>
               ) : null}
 
-              <div className="field-grid field-grid--three">
-                <div className="field">
-                  <label htmlFor="collectionStatus">Status</label>
+              <div className={cn(fieldGridClass, 'mt-6')}>
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="collectionStatus">
+                    Status
+                  </label>
                   <ThemedSelect
                     value={form.collectionStatus}
                     onChange={(nextValue) =>
@@ -891,73 +1021,173 @@ export default function FinalizeScanPage() {
                     ]}
                   />
                 </div>
-                <div className="field">
-                  <label htmlFor="condition">Condition</label>
-                  <input id="condition" value={form.condition} onChange={(event) => setForm({ ...form, condition: event.target.value })} disabled={isWanted} />
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="condition">
+                    Condition
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="condition"
+                    value={form.condition}
+                    onChange={(event) => setForm({ ...form, condition: event.target.value })}
+                    disabled={isWanted}
+                  />
                 </div>
-                <div className="field">
-                  <label htmlFor="gradeEstimate">Grade estimate</label>
-                  <input id="gradeEstimate" value={form.gradeEstimate} onChange={(event) => setForm({ ...form, gradeEstimate: event.target.value })} disabled={isWanted} />
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="gradeEstimate">
+                    Grade estimate
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="gradeEstimate"
+                    value={form.gradeEstimate}
+                    onChange={(event) =>
+                      setForm({ ...form, gradeEstimate: event.target.value })
+                    }
+                    disabled={isWanted}
+                  />
                 </div>
-                <div className="field">
-                  <label htmlFor="autographFormat">Autograph format</label>
-                  <input id="autographFormat" value={form.autographFormat} onChange={(event) => setForm({ ...form, autographFormat: event.target.value })} disabled={isWanted} />
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="autographFormat">
+                    Autograph format
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="autographFormat"
+                    value={form.autographFormat}
+                    onChange={(event) =>
+                      setForm({ ...form, autographFormat: event.target.value })
+                    }
+                    disabled={isWanted}
+                  />
                 </div>
-                <div className="field">
-                  <label htmlFor="askingPriceCents">Asking price (cents)</label>
-                  <input id="askingPriceCents" value={form.askingPriceCents} onChange={(event) => setForm({ ...form, askingPriceCents: event.target.value })} disabled={isWanted} />
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="askingPriceCents">
+                    Asking price (cents)
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="askingPriceCents"
+                    value={form.askingPriceCents}
+                    onChange={(event) =>
+                      setForm({ ...form, askingPriceCents: event.target.value })
+                    }
+                    disabled={isWanted}
+                  />
                 </div>
-                <div className="field">
-                  <label htmlFor="priority">Wishlist priority</label>
-                  <input id="priority" value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })} />
+                <div className={fieldClass}>
+                  <label className={fieldLabelClass} htmlFor="priority">
+                    Wishlist priority
+                  </label>
+                  <input
+                    className={inputClass}
+                    id="priority"
+                    value={form.priority}
+                    onChange={(event) => setForm({ ...form, priority: event.target.value })}
+                  />
                 </div>
-                <div className="field field--full">
-                  <label htmlFor="notes">Notes</label>
-                  <textarea id="notes" rows={4} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
+                <div className={cn(fieldClass, 'md:col-span-2 xl:col-span-3')}>
+                  <label className={fieldLabelClass} htmlFor="notes">
+                    Notes
+                  </label>
+                  <textarea
+                    className={textareaClass}
+                    id="notes"
+                    rows={4}
+                    value={form.notes}
+                    onChange={(event) => setForm({ ...form, notes: event.target.value })}
+                  />
                 </div>
               </div>
 
-              <div className="toggle-row">
-                <label className="checkbox">
-                  <input type="checkbox" checked={form.isAutographed} onChange={(event) => setForm({ ...form, isAutographed: event.target.checked })} disabled={isWanted} />
-                  <span>This copy is signed</span>
+              <div className={cn(actionRowClass, 'mt-6')}>
+                <label className={cn(checkboxRowClass, 'cursor-pointer')}>
+                  <input
+                    className={checkboxInputClass}
+                    type="checkbox"
+                    checked={form.isAutographed}
+                    onChange={(event) =>
+                      setForm({ ...form, isAutographed: event.target.checked })
+                    }
+                    disabled={isWanted}
+                  />
+                  <span className="text-sm font-medium text-[var(--text)]">
+                    This copy is signed
+                  </span>
                 </label>
-                <label className="checkbox">
-                  <input type="checkbox" checked={form.isForTrade} onChange={(event) => setForm({ ...form, isForTrade: event.target.checked })} disabled={isWanted} />
-                  <span>Open to trade</span>
+                <label className={cn(checkboxRowClass, 'cursor-pointer')}>
+                  <input
+                    className={checkboxInputClass}
+                    type="checkbox"
+                    checked={form.isForTrade}
+                    onChange={(event) =>
+                      setForm({ ...form, isForTrade: event.target.checked })
+                    }
+                    disabled={isWanted}
+                  />
+                  <span className="text-sm font-medium text-[var(--text)]">Open to trade</span>
                 </label>
-                <label className="checkbox">
-                  <input type="checkbox" checked={form.isForSale} onChange={(event) => setForm({ ...form, isForSale: event.target.checked })} disabled={isWanted} />
-                  <span>Open to sale</span>
+                <label className={cn(checkboxRowClass, 'cursor-pointer')}>
+                  <input
+                    className={checkboxInputClass}
+                    type="checkbox"
+                    checked={form.isForSale}
+                    onChange={(event) =>
+                      setForm({ ...form, isForSale: event.target.checked })
+                    }
+                    disabled={isWanted}
+                  />
+                  <span className="text-sm font-medium text-[var(--text)]">Open to sale</span>
                 </label>
               </div>
             </section>
 
-            <section className="surface">
-              <div className="section-header">
+            <section className={cn(surfaceClass, 'p-6 sm:p-8')}>
+              <div className={sectionHeaderClass}>
                 <div>
-                  <h2>Image handling</h2>
-                  <p className="fine-print">Choose whether the scan image becomes your personal front image and whether it also seeds the shared canonical image.</p>
+                  <h2 className={surfaceTitleClass}>Image handling</h2>
+                  <p className={cn(finePrintClass, 'mt-2')}>
+                    Choose whether the scan image becomes your personal front image and whether it
+                    also seeds the shared canonical image.
+                  </p>
                 </div>
               </div>
 
-              <div className="toggle-row">
-                <label className="checkbox">
-                  <input type="checkbox" checked={form.keepScanImage} onChange={(event) => setForm({ ...form, keepScanImage: event.target.checked })} />
-                  <span>Keep scan image as the initial personal card image</span>
+              <div className={cn(actionRowClass, 'mt-6')}>
+                <label className={cn(checkboxRowClass, 'cursor-pointer')}>
+                  <input
+                    className={checkboxInputClass}
+                    type="checkbox"
+                    checked={form.keepScanImage}
+                    onChange={(event) =>
+                      setForm({ ...form, keepScanImage: event.target.checked })
+                    }
+                  />
+                  <span className="text-sm font-medium text-[var(--text)]">
+                    Keep scan image as the initial personal card image
+                  </span>
                 </label>
-                <label className="checkbox">
-                  <input type="checkbox" checked={form.promoteToCanonical} onChange={(event) => setForm({ ...form, promoteToCanonical: event.target.checked })} />
-                  <span>Seed the shared canonical image from this scan for future fallback use</span>
+                <label className={cn(checkboxRowClass, 'cursor-pointer')}>
+                  <input
+                    className={checkboxInputClass}
+                    type="checkbox"
+                    checked={form.promoteToCanonical}
+                    onChange={(event) =>
+                      setForm({ ...form, promoteToCanonical: event.target.checked })
+                    }
+                  />
+                  <span className="text-sm font-medium text-[var(--text)]">
+                    Seed the shared canonical image from this scan for future fallback use
+                  </span>
                 </label>
               </div>
             </section>
 
-            <div className="action-row">
-              <button className="button" type="submit" disabled={busy}>
+            <div className={actionRowClass}>
+              <button className={primaryButtonClass} type="submit" disabled={busy}>
                 {busy ? 'Saving...' : 'Save card'}
               </button>
-              <Link className="button-ghost" href={scanId ? `/review/${scanId}` : '/review'}>
+              <Link className={ghostButtonClass} href={scanId ? `/review/${scanId}` : '/review'}>
                 Back
               </Link>
             </div>

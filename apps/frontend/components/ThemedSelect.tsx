@@ -1,5 +1,6 @@
 import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { cn, inputClass } from '../lib/ui';
 
 export type ThemedSelectOption = {
   value: string;
@@ -109,13 +110,22 @@ export function ThemedSelect({
 
   const menu = open && mounted && menuStyle
     ? createPortal(
-        <div className="themed-select__menu" ref={menuRef} role="listbox" style={menuStyle}>
+        <div
+          className="z-[70] overflow-auto rounded-[24px] border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-2 shadow-[var(--shadow-lg)] backdrop-blur-2xl"
+          ref={menuRef}
+          role="listbox"
+          style={menuStyle}
+        >
           {options.map((option) => (
             <button
               key={option.value}
-              className={`themed-select__option${
-                option.value === value ? ' is-selected' : ''
-              }${option.disabled ? ' is-disabled' : ''}`}
+              className={cn(
+                'flex w-full flex-col items-start gap-1 rounded-[18px] px-3 py-3 text-left text-sm outline-none',
+                option.value === value
+                  ? 'bg-[var(--accent-soft)] text-[var(--text)]'
+                  : 'text-[var(--text-soft)] hover:bg-[var(--surface-ghost)] hover:text-[var(--text)]',
+                option.disabled ? 'cursor-not-allowed opacity-50' : '',
+              )}
               type="button"
               role="option"
               aria-selected={option.value === value}
@@ -125,8 +135,10 @@ export function ThemedSelect({
                 setOpen(false);
               }}
             >
-              <span>{option.label}</span>
-              {option.description ? <small>{option.description}</small> : null}
+              <span className="font-medium">{option.label}</span>
+              {option.description ? (
+                <small className="text-xs text-[var(--muted)]">{option.description}</small>
+              ) : null}
             </button>
           ))}
         </div>,
@@ -137,21 +149,25 @@ export function ThemedSelect({
   return (
     <>
       <div
-        className={`themed-select${open ? ' is-open' : ''}${disabled ? ' is-disabled' : ''}`}
+        className={cn('relative', open ? 'z-20' : '', disabled ? 'opacity-60' : '')}
         ref={rootRef}
       >
         <button
           ref={triggerRef}
-          className="themed-select__trigger"
+          className={cn(
+            inputClass,
+            'flex items-center justify-between gap-3 text-left',
+            open ? 'border-[var(--border-strong)] shadow-[var(--ring)]' : '',
+          )}
           type="button"
           aria-haspopup="listbox"
           aria-expanded={open}
           disabled={disabled}
           onClick={() => setOpen((current) => !current)}
         >
-          <span>{selected?.label ?? placeholder}</span>
-          <span className="themed-select__caret" aria-hidden="true">
-            ▾
+          <span className="truncate">{selected?.label ?? placeholder}</span>
+          <span className="shrink-0 text-sm text-[var(--muted)]" aria-hidden="true">
+            v
           </span>
         </button>
       </div>

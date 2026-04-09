@@ -4,6 +4,18 @@ import { useRouter } from 'next/router';
 import { FormEvent, useEffect, useState } from 'react';
 import { AppShell } from '../components/AppShell';
 import { PageHeader } from '../components/PageHeader';
+import {
+  actionRowClass,
+  cn,
+  fieldClass,
+  fieldLabelClass,
+  ghostButtonClass,
+  inputClass,
+  messageClass,
+  pageStackClass,
+  primaryButtonClass,
+  surfaceClass,
+} from '../lib/ui';
 import { useAuth } from '../lib/auth-context';
 
 export default function LoginPage() {
@@ -41,23 +53,35 @@ export default function LoginPage() {
         <title>Log In | Trading Card App</title>
       </Head>
 
-      <div className="auth-shell fade-up">
+      <div className={pageStackClass}>
         <PageHeader
           eyebrow="Accounts"
           title="Sign in to your private collection."
-          description="Guests can browse the demo binder, but scans, edits, and CSV imports now belong to signed-in collectors."
+          description="Guests can browse the demo inventory, but scans, edits, and CSV imports belong to signed-in collectors."
         />
 
-        <section className="surface auth-card">
-          <form className="stack" onSubmit={handleSubmit}>
-            <div className="field">
-              <label htmlFor="email">Email</label>
-              <input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+        <section className={cn(surfaceClass, 'mx-auto w-full max-w-2xl p-6 sm:p-8')}>
+          <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
+            <div className={fieldClass}>
+              <label className={fieldLabelClass} htmlFor="email">
+                Email
+              </label>
+              <input
+                className={inputClass}
+                id="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
             </div>
 
-            <div className="field">
-              <label htmlFor="password">Password</label>
+            <div className={fieldClass}>
+              <label className={fieldLabelClass} htmlFor="password">
+                Password
+              </label>
               <input
+                className={inputClass}
                 id="password"
                 type="password"
                 value={password}
@@ -67,13 +91,13 @@ export default function LoginPage() {
               />
             </div>
 
-            {error ? <p className="message message--error">{error}</p> : null}
+            {error ? <p className={messageClass('error')}>{error}</p> : null}
 
-            <div className="action-row">
-              <button className="button" type="submit" disabled={busy}>
+            <div className={actionRowClass}>
+              <button className={primaryButtonClass} type="submit" disabled={busy}>
                 {busy ? 'Signing in...' : 'Log in'}
               </button>
-              <Link className="button-ghost" href="/signup">
+              <Link className={ghostButtonClass} href="/signup">
                 Need an account?
               </Link>
             </div>

@@ -6,6 +6,21 @@ import { AppShell } from '../../components/AppShell';
 import { CardImage } from '../../components/CardImage';
 import { PageHeader } from '../../components/PageHeader';
 import { StatusPill } from '../../components/StatusPill';
+import {
+  actionRowClass,
+  cn,
+  finePrintClass,
+  ghostButtonClass,
+  messageClass,
+  pageStackClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  sectionHeaderClass,
+  softSurfaceClass,
+  surfaceClass,
+  surfaceCopyClass,
+  surfaceTitleClass,
+} from '../../lib/ui';
 import { useAuth } from '../../lib/auth-context';
 import { getScan, ScanResponse } from '../../lib/api';
 
@@ -79,7 +94,11 @@ export default function ReviewScanPage() {
     void fetchScan();
 
     const poller = setInterval(() => {
-      if (scan?.status === 'NEEDS_REVIEW' || scan?.status === 'FAILED' || scan?.status === 'CONFIRMED') {
+      if (
+        scan?.status === 'NEEDS_REVIEW' ||
+        scan?.status === 'FAILED' ||
+        scan?.status === 'CONFIRMED'
+      ) {
         return;
       }
       void fetchScan();
@@ -118,15 +137,15 @@ export default function ReviewScanPage() {
         <title>Review Scan | Trading Card App</title>
       </Head>
 
-      <div className="stack fade-up">
+      <div className={pageStackClass}>
         <PageHeader
           eyebrow="Scan Review"
           title={`Review scan ${scanId ?? '...'}`}
-          description="Inspect OCR, compare evidence, and confirm the best candidate into your private binder."
+          description="Inspect OCR, compare evidence, and confirm the best candidate into your private inventory."
           actions={
-            <div className="action-row">
+            <div className={actionRowClass}>
               <StatusPill label={scan ? formatScanStatus(scan.status) : 'Loading'} tone={statusTone} />
-              <Link className="button-ghost" href="/scan">
+              <Link className={ghostButtonClass} href="/scan">
                 Scan another
               </Link>
             </div>
@@ -134,51 +153,57 @@ export default function ReviewScanPage() {
         />
 
         {!loading && !authenticated ? (
-          <section className="surface gate-card">
-            <h2 className="surface-title">Sign in to review scans</h2>
-            <p className="surface-copy">
-              Scan jobs are now tied to user profiles, so guests cannot access review or confirmation flows.
+          <section className={cn(surfaceClass, 'p-6 sm:p-8')}>
+            <h2 className={surfaceTitleClass}>Sign in to review scans</h2>
+            <p className={cn(surfaceCopyClass, 'mt-3')}>
+              Scan jobs are tied to user profiles, so guests cannot access review or confirmation
+              flows.
             </p>
-            <div className="action-row">
-              <Link className="button" href="/login">
+            <div className={cn(actionRowClass, 'mt-5')}>
+              <Link className={primaryButtonClass} href="/login">
                 Log in
               </Link>
-              <Link className="button-secondary" href="/signup">
+              <Link className={secondaryButtonClass} href="/signup">
                 Create account
               </Link>
             </div>
           </section>
         ) : (
           <>
-            {error ? <p className="message message--error">{error}</p> : null}
-            {!scan ? <p className="message">Loading scan...</p> : null}
+            {error ? <p className={messageClass('error')}>{error}</p> : null}
+            {!scan ? <p className={messageClass()}>Loading scan...</p> : null}
 
             {scan ? (
               <>
-                {scan.error ? <p className="message message--error">Error: {scan.error}</p> : null}
+                {scan.error ? <p className={messageClass('error')}>Error: {scan.error}</p> : null}
                 {(scan.status === 'PROCESSING' || scan.status === 'QUEUED') ? (
-                  <section className="surface">
-                    <h2 className="surface-title">Processing scan</h2>
-                    <p className="surface-copy">
-                      The backend is still working through OCR and candidate lookup. This page will keep polling until the scan is ready.
+                  <section className={cn(surfaceClass, 'p-6')}>
+                    <h2 className={surfaceTitleClass}>Processing scan</h2>
+                    <p className={cn(surfaceCopyClass, 'mt-3')}>
+                      The backend is still working through OCR and candidate lookup. This page will
+                      keep polling until the scan is ready.
                     </p>
                   </section>
                 ) : null}
 
-                <div className="review-layout">
-                  <aside className="review-layout__sidebar">
-                    <section className="surface review-sidebar-panel">
-                      <div className="section-header">
+                <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+                  <aside className="flex flex-col gap-6">
+                    <section className={cn(surfaceClass, 'p-5 sm:p-6')}>
+                      <div className={sectionHeaderClass}>
                         <div>
-                          <h2>Uploaded images</h2>
-                          <p className="fine-print">Reference shots used for OCR and match lookup.</p>
+                          <h2 className={surfaceTitleClass}>Uploaded images</h2>
+                          <p className={cn(finePrintClass, 'mt-2')}>
+                            Reference shots used for OCR and match lookup.
+                          </p>
                         </div>
                       </div>
 
-                      <div className="preview-grid preview-grid--stacked">
+                      <div className="mt-5 grid gap-4">
                         {scan.frontImageUrl ? (
-                          <div className="preview-frame">
-                            <h3>Front</h3>
+                          <div className={cn(softSurfaceClass, 'p-4')}>
+                            <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                              Front
+                            </h3>
                             <CardImage
                               alt="Uploaded front"
                               src={toAbsoluteApiUrl(scan.frontImageUrl) ?? undefined}
@@ -187,8 +212,10 @@ export default function ReviewScanPage() {
                         ) : null}
 
                         {scan.backImageUrl ? (
-                          <div className="preview-frame">
-                            <h3>Back</h3>
+                          <div className={cn(softSurfaceClass, 'p-4')}>
+                            <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+                              Back
+                            </h3>
                             <CardImage
                               alt="Uploaded back"
                               src={toAbsoluteApiUrl(scan.backImageUrl) ?? undefined}
@@ -198,24 +225,29 @@ export default function ReviewScanPage() {
                       </div>
 
                       {scan.ocrText ? (
-                        <details className="review-ocr">
-                          <summary>OCR debug text</summary>
-                          <p className="helper-text summary-copy">{scan.ocrText}</p>
+                        <details className="mt-5 rounded-[22px] border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+                          <summary className="cursor-pointer text-sm font-semibold text-[var(--text)]">
+                            OCR debug text
+                          </summary>
+                          <p className={cn(finePrintClass, 'mt-3 whitespace-pre-wrap')}>
+                            {scan.ocrText}
+                          </p>
                         </details>
                       ) : null}
                     </section>
                   </aside>
 
-                  <section className="surface review-layout__candidates">
-                    <div className="section-header">
+                  <section className={cn(surfaceClass, 'p-5 sm:p-6')}>
+                    <div className={sectionHeaderClass}>
                       <div>
-                        <h2>Candidates</h2>
-                        <p className="fine-print">
-                          Pick the best match, then continue to the finalize step before the first save.
+                        <h2 className={surfaceTitleClass}>Candidates</h2>
+                        <p className={cn(finePrintClass, 'mt-2')}>
+                          Pick the best match, then continue to the finalize step before the first
+                          save.
                         </p>
                       </div>
                       <button
-                        className="button"
+                        className={primaryButtonClass}
                         type="button"
                         onClick={handleContinue}
                         disabled={selectedCandidateId === null}
@@ -225,7 +257,7 @@ export default function ReviewScanPage() {
                     </div>
 
                     {scan.candidates.length > 0 ? (
-                      <div className="candidate-grid review-candidate-list">
+                      <div className="mt-6 grid gap-4">
                         {scan.candidates.map((candidate) => {
                           const previewImageUrl = toAbsoluteApiUrl(
                             candidate.sourceHints?.find((hint) => hint.imageUrl)?.imageUrl ?? null,
@@ -234,52 +266,64 @@ export default function ReviewScanPage() {
                           return (
                             <article
                               key={candidate.id}
-                              className={`candidate-card${
-                                selectedCandidateId === candidate.id ? ' is-selected' : ''
-                              }`}
+                              className={cn(
+                                softSurfaceClass,
+                                'grid gap-4 p-4 sm:grid-cols-[120px_minmax(0,1fr)]',
+                                selectedCandidateId === candidate.id
+                                  ? 'border-[var(--accent)] shadow-[var(--ring)]'
+                                  : '',
+                              )}
                             >
-                              <input
-                                className="candidate-radio"
-                                type="radio"
-                                name="candidate"
-                                checked={selectedCandidateId === candidate.id}
-                                onChange={() => setSelectedCandidateId(candidate.id)}
-                              />
+                              <div className="flex flex-col gap-3">
+                                <input
+                                  className="h-5 w-5 accent-[var(--accent)]"
+                                  type="radio"
+                                  name="candidate"
+                                  checked={selectedCandidateId === candidate.id}
+                                  onChange={() => setSelectedCandidateId(candidate.id)}
+                                />
+                                <CardImage alt={`${candidate.name} preview`} src={previewImageUrl} />
+                              </div>
 
-                              <CardImage alt={`${candidate.name} preview`} src={previewImageUrl} />
-
-                              <div>
-                                <h3>{candidate.name}</h3>
-                                <div className="candidate-detail-list">
+                              <div className="min-w-0">
+                                <h3 className="text-xl font-semibold tracking-[-0.04em] text-[var(--text)] [font-family:var(--font-display)]">
+                                  {candidate.name}
+                                </h3>
+                                <div className="mt-4 grid gap-2 text-sm text-[var(--text-soft)] sm:grid-cols-2">
                                   <span>
-                                    <strong>Player:</strong> {candidate.player ?? 'Unknown'}
+                                    <strong className="text-[var(--text)]">Player:</strong>{' '}
+                                    {candidate.player ?? 'Unknown'}
                                   </span>
                                   <span>
-                                    <strong>Year / season:</strong>{' '}
+                                    <strong className="text-[var(--text)]">Year / season:</strong>{' '}
                                     {candidate.season ??
                                       (candidate.year ? String(candidate.year) : 'Unknown')}
                                   </span>
                                   <span>
-                                    <strong>Brand:</strong> {candidate.brand ?? 'Unknown'}
+                                    <strong className="text-[var(--text)]">Brand:</strong>{' '}
+                                    {candidate.brand ?? 'Unknown'}
                                   </span>
                                   <span>
-                                    <strong>Set:</strong> {formatCandidateSet(candidate)}
+                                    <strong className="text-[var(--text)]">Set:</strong>{' '}
+                                    {formatCandidateSet(candidate)}
                                   </span>
                                   <span>
-                                    <strong>Card #:</strong>{' '}
+                                    <strong className="text-[var(--text)]">Card #:</strong>{' '}
                                     {candidate.cardNumber ? `#${candidate.cardNumber}` : 'Unknown'}
                                   </span>
                                   <span>
-                                    <strong>Sport:</strong> {candidate.sport ?? 'Unknown'}
+                                    <strong className="text-[var(--text)]">Sport:</strong>{' '}
+                                    {candidate.sport ?? 'Unknown'}
                                   </span>
                                   {candidate.variant ? (
-                                    <span>
-                                      <strong>Variant:</strong> {candidate.variant}
+                                    <span className="sm:col-span-2">
+                                      <strong className="text-[var(--text)]">Variant:</strong>{' '}
+                                      {candidate.variant}
                                     </span>
                                   ) : null}
                                 </div>
 
-                                <div className="candidate-meta">
+                                <div className={cn(actionRowClass, 'mt-4')}>
                                   <StatusPill label={`Match ${candidate.score.toFixed(3)}`} tone="accent" />
                                   <StatusPill
                                     label={`Validation ${
@@ -288,22 +332,28 @@ export default function ReviewScanPage() {
                                   />
                                   <StatusPill
                                     label={`${candidate.sourceHints?.length ?? 0} evidence links`}
-                                    tone="neutral"
                                   />
                                 </div>
 
                                 {candidate.sourceHints?.length ? (
-                                  <ul className="evidence-list">
+                                  <ul className="mt-4 grid gap-2 text-sm text-[var(--text-soft)]">
                                     {candidate.sourceHints.map((hint) => (
                                       <li key={`${candidate.id}-${hint.source}-${hint.url}`}>
-                                        <a className="subtle-link" href={hint.url} target="_blank" rel="noreferrer">
+                                        <a
+                                          className="underline decoration-[var(--border-strong)] underline-offset-4 hover:text-[var(--text)]"
+                                          href={hint.url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
                                           {hint.title}
                                         </a>
                                       </li>
                                     ))}
                                   </ul>
                                 ) : (
-                                  <p className="helper-text">No source evidence attached to this candidate.</p>
+                                  <p className={cn(finePrintClass, 'mt-4')}>
+                                    No source evidence attached to this candidate.
+                                  </p>
                                 )}
                               </div>
                             </article>
@@ -311,9 +361,9 @@ export default function ReviewScanPage() {
                         })}
                       </div>
                     ) : (
-                      <div className="empty-state">
-                        No candidates are available yet. If the scan failed to identify a card, try a
-                        sharper photo or include the back image.
+                      <div className={cn(messageClass(), 'mt-6')}>
+                        No candidates are available yet. If the scan failed to identify a card, try
+                        a sharper photo or include the back image.
                       </div>
                     )}
                   </section>

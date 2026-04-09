@@ -1,3 +1,15 @@
+import {
+  actionRowClass,
+  finePrintClass,
+  ghostButtonClass,
+  primaryButtonClass,
+  sectionHeaderClass,
+  sectionTitleClass,
+  softSurfaceClass,
+  cn,
+  messageClass,
+} from '../lib/ui';
+
 export type SuggestionPreviewItem = {
   field: string;
   previous: string;
@@ -24,38 +36,43 @@ export function SuggestionPreview({
   onDismiss,
 }: SuggestionPreviewProps) {
   return (
-    <section className="surface suggestion-panel">
-      <div className="section-header">
+    <section className={cn(softSurfaceClass, 'p-5 sm:p-6')}>
+      <div className={sectionHeaderClass}>
         <div>
-          <h2>{title}</h2>
-          <p className="fine-print">{subtitle}</p>
+          <h2 className={sectionTitleClass}>{title}</h2>
+          <p className={cn(finePrintClass, 'mt-2')}>{subtitle}</p>
         </div>
       </div>
 
       {items.length ? (
         <>
-          <div className="suggestion-list">
+          <div className="mt-5 grid gap-3">
             {items.map((item) => (
-              <div className="suggestion-item" key={`${item.field}-${item.next}`}>
-                <strong>{item.field}</strong>
-                <span>{item.previous}</span>
-                <span className="suggestion-arrow">→</span>
-                <span>{item.next}</span>
+              <div
+                className="grid gap-2 rounded-[22px] border border-[var(--border)] bg-[var(--surface-soft)]/90 p-4 sm:grid-cols-[minmax(0,160px)_minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center"
+                key={`${item.field}-${item.next}`}
+              >
+                <strong className="text-sm font-semibold tracking-[0.02em] text-[var(--text)]">
+                  {item.field}
+                </strong>
+                <span className="text-sm text-[var(--text-soft)]">{item.previous}</span>
+                <span className="text-sm font-semibold text-[var(--accent-strong)]">To</span>
+                <span className="text-sm text-[var(--text)]">{item.next}</span>
               </div>
             ))}
           </div>
 
-          <div className="action-row">
-            <button className="button" type="button" onClick={onApply}>
+          <div className={cn(actionRowClass, 'mt-5')}>
+            <button className={primaryButtonClass} type="button" onClick={onApply}>
               {applyLabel}
             </button>
-            <button className="button-ghost" type="button" onClick={onDismiss}>
+            <button className={ghostButtonClass} type="button" onClick={onDismiss}>
               Dismiss
             </button>
           </div>
         </>
       ) : (
-        <p className="message">{emptyMessage}</p>
+        <p className={cn(messageClass(), 'mt-5')}>{emptyMessage}</p>
       )}
     </section>
   );
