@@ -30,9 +30,11 @@ function main() {
         });
       }
 
-      // All migrations are now baselined — deploy should be a no-op or apply
-      // any genuinely new migrations that weren't in the baseline set.
-      runPrisma(['migrate', 'deploy']);
+      // All migrations are now baselined — deploy is a no-op because every
+      // migration is already marked as applied. Use `db push` to reconcile the
+      // actual database schema with the Prisma schema, creating any tables or
+      // columns that were missing without touching existing ones.
+      runPrisma(['db', 'push', '--skip-generate']);
     } else {
       process.exit(migrateResult.status ?? 1);
     }
