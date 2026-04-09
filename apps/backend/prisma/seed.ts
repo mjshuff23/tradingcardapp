@@ -20,6 +20,21 @@ const seedDataPath = path.join(__dirname, 'seed-data', 'catalog.json');
 const seedAssetsRoot = path.join(__dirname, 'seed-assets');
 
 async function main() {
+  const tableCheck = await prisma.$queryRaw`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'CardSet'
+    )
+  `;
+  const cardSetExists = (tableCheck as Array<{ exists: boolean }>)[0]?.exists;
+  if (!cardSetExists) {
+    console.log(
+      'Seed skipped: CardSet table does not exist. ' +
+        'The database schema is incomplete — run pending migrations first.',
+    );
+    return;
+  }
+
   const raw = await fs.readFile(seedDataPath, 'utf8');
   const catalog = JSON.parse(raw);
 
