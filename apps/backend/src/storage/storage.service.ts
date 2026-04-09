@@ -16,18 +16,25 @@ export type StoredImageContent = {
   contentType: string;
 };
 
+type StorageTarget = 'card' | 'profile';
+
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
   private readonly s3Client: S3Client;
-  private readonly bucket: string;
+  private readonly profileBucket: string;
+  private readonly cardBucket: string;
 
   constructor(private readonly configService: ConfigService) {
     const endpoint = this.configService.get<string>('S3_ENDPOINT') ?? 'http://localhost:3900';
     const region = this.configService.get<string>('S3_REGION') ?? 'garage';
     const accessKeyId = this.configService.get<string>('S3_ACCESS_KEY') ?? 'tradingcards';
     const secretAccessKey = this.configService.get<string>('S3_SECRET_KEY') ?? 'tradingcardssecret';
-    this.bucket = this.configService.get<string>('S3_BUCKET') ?? 'trading-cards';
+    const defaultBucket = this.configService.get<string>('S3_BUCKET') ?? 'trading-cards';
+    this.profileBucket =
+      this.configService.get<string>('S3_PROFILE_BUCKET') ?? defaultBucket;
+    this.cardBucket =
+      this.configService.get<string>('S3_CARD_BUCKET') ?? defaultBucket;
 
     this.s3Client = new S3Client({
       endpoint,
@@ -41,12 +48,70 @@ export class StorageService {
   }
 
   async uploadScanImage(buffer: Buffer, sourceFilename: string): Promise<StoredImage> {
-    const extension = this.getExtension(sourceFilename);
-    const id = randomUUID();
-    const originalKey = `scans/original/${id}.${extension}`;
-    const thumbnailKey = `scans/thumb/${id}.jpg`;
+    return this.uploadImageToBucket({
+      buffer,
+      sourceFilename,
+      target: 'card',
+      keyPrefix: 'user-cards/scans',
+    });
+  }
 
-    const thumbnailBuffer = await sharp(buffer)
+  async uploadCardImage(buffer: Buffer, sourceFilename: string): Promise<StoredImage> {
+    return this.uploadImageToBucket({
+      buffer,
+      sourceFilename,
+      target: 'card',
+      keyPrefix: 'user-cards/catalog',
+    });
+  }
+
+  async uploadCanonicalCardImage(buffer: Buffer, sourceFilename: string): Promise<StoredImage> {
+    return this.uploadImageToBucket({
+      buffer,
+      sourceFilename,
+      target: 'card',
+      keyPrefix: 'canonical-cards',
+    });
+  }
+
+  async uploadProfileImage(buffer: Buffer, sourceFilename: string): Promise<StoredImage> {
+    return this.uploadImageToBucket({
+      buffer,
+      sourceFilename,
+      target: 'profile',
+      keyPrefix: 'profiles',
+    });
+  }
+
+  async readImage(key: string): Promise<StoredImageContent> {
+    return this.readStoredImage(key, 'card');
+  }
+
+  async readCardImage(key: string): Promise<StoredImageContent> {
+    return this.readStoredImage(key, 'card');
+  }
+
+  async readProfileImage(key: string): Promise<StoredImageContent> {
+    return this.readStoredImage(key, 'profile');
+  }
+
+  async readCanonicalCardImage(key: string): Promise<StoredImageContent> {
+    return this.readStoredImage(key, 'card');
+  }
+
+  private async uploadImageToBucket(input: {
+    buffer: Buffer;
+    sourceFilename: string;
+    target: StorageTarget;
+    keyPrefix: string;
+  }): Promise<StoredImage> {
+    const extension = this.getExtension(input.sourceFilename);
+    const id = randomUUID();
+    const originalKey = `${input.keyPrefix}/original/${id}.${extension}`;
+    const thumbnailKey = `${input.keyPrefix}/thumb/${id}.jpg`;
+    const bucket = this.resolveBucket(input.target);
+
+    const thumbnailBuffer = await sharp(input.buffer)
       .resize({ width: 600, height: 600, fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 80 })
       .toBuffer();
@@ -55,15 +120,15 @@ export class StorageService {
       await Promise.all([
         this.s3Client.send(
           new PutObjectCommand({
-            Bucket: this.bucket,
+            Bucket: bucket,
             Key: originalKey,
-            Body: buffer,
+            Body: input.buffer,
             ContentType: this.detectMimeType(extension),
           }),
         ),
         this.s3Client.send(
           new PutObjectCommand({
-            Bucket: this.bucket,
+            Bucket: bucket,
             Key: thumbnailKey,
             Body: thumbnailBuffer,
             ContentType: 'image/jpeg',
@@ -75,11 +140,14 @@ export class StorageService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Falling back to local image storage because S3 upload failed: ${message}`);
-      return this.writeLocally(id, extension, buffer, thumbnailBuffer);
+      return this.writeLocally(input.keyPrefix, id, extension, input.buffer, thumbnailBuffer);
     }
   }
 
-  async readImage(key: string): Promise<StoredImageContent> {
+  private async readStoredImage(
+    key: string,
+    target: StorageTarget,
+  ): Promise<StoredImageContent> {
     if (!key) {
       throw new Error('Image key is required.');
     }
@@ -98,7 +166,7 @@ export class StorageService {
 
     const response = await this.s3Client.send(
       new GetObjectCommand({
-        Bucket: this.bucket,
+        Bucket: this.resolveBucket(target),
         Key: key,
       }),
     );
@@ -112,6 +180,10 @@ export class StorageService {
       buffer: Buffer.from(bytes),
       contentType: response.ContentType ?? 'application/octet-stream',
     };
+  }
+
+  private resolveBucket(target: StorageTarget) {
+    return target === 'profile' ? this.profileBucket : this.cardBucket;
   }
 
   private getExtension(sourceFilename: string): string {
@@ -140,14 +212,15 @@ export class StorageService {
   }
 
   private async writeLocally(
+    keyPrefix: string,
     id: string,
     extension: string,
     originalBuffer: Buffer,
     thumbnailBuffer: Buffer,
   ): Promise<StoredImage> {
     const localRoot = path.resolve(process.cwd(), '.local-storage');
-    const originalDir = path.join(localRoot, 'scans', 'original');
-    const thumbDir = path.join(localRoot, 'scans', 'thumb');
+    const originalDir = path.join(localRoot, keyPrefix, 'original');
+    const thumbDir = path.join(localRoot, keyPrefix, 'thumb');
 
     await Promise.all([
       fs.mkdir(originalDir, { recursive: true }),
@@ -163,8 +236,8 @@ export class StorageService {
     ]);
 
     return {
-      originalKey: `local/scans/original/${originalFile}`,
-      thumbnailKey: `local/scans/thumb/${thumbFile}`,
+      originalKey: `local/${keyPrefix}/original/${originalFile}`,
+      thumbnailKey: `local/${keyPrefix}/thumb/${thumbFile}`,
     };
   }
 }

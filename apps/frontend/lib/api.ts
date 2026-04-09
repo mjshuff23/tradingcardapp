@@ -1,13 +1,26 @@
 export type ScanStatus = 'QUEUED' | 'PROCESSING' | 'NEEDS_REVIEW' | 'CONFIRMED' | 'FAILED';
 export type CollectionStatus = 'OWNED' | 'WANTED';
+export type CardQueryMode = 'text' | 'nl';
+
+export type AuthUser = {
+  id: string;
+  username: string;
+  email: string;
+  pfpUrl: string | null;
+};
+
+export type AuthSession = {
+  authenticated: boolean;
+  user: AuthUser | null;
+};
 
 export type ValidationHint = {
-  source: 'ebay_sold' | 'psa' | 'web_lookup';
+  source: string;
   provider?: string;
   url: string;
   title: string;
   score: number;
-  imageUrl?: string;
+  imageUrl?: string | null;
 };
 
 export type ScanCandidate = {
@@ -35,33 +48,145 @@ export type ScanResponse = {
   candidates: ScanCandidate[];
 };
 
-export type CardRecord = {
-  id: number;
+export type CardSet = {
+  id: string;
+  brand: string | null;
+  setName: string | null;
+  yearManufactured: number | null;
+  sport: string | null;
+  season: string | null;
+  cardConditionScale: string | null;
+  cardSize: string | null;
+  cardThicknessPt: number | null;
+  countryOfOrigin: string | null;
+  language: string | null;
+  material: string | null;
+  metadata: Record<string, unknown> | null;
+};
+
+export type CardDefinition = {
+  id: string;
+  normalizedCardKey: string;
+  cardNumber: string | null;
   name: string;
-  set: string | null;
-  year: number | null;
   player: string | null;
   variant: string | null;
-  sport: string | null;
+  legacySetText: string | null;
+  category: string | null;
+  subcategory: string | null;
+  hasAutographVariant: boolean;
+  features: Record<string, unknown> | null;
+  originalOrReprint: string | null;
+  parallelOrVariety: string | null;
+  setType: string | null;
+  insertSetName: string | null;
+  cardType: string | null;
+  isVintage: boolean;
+  metadata: Record<string, unknown> | null;
+  cardSet: CardSet | null;
+};
+
+export type CardCollectionRecord = {
+  collectionStatus: CollectionStatus;
   imageUrl: string | null;
   originalImageKey: string | null;
   thumbnailImageKey: string | null;
-  confidence: number | null;
-  collectionStatus: CollectionStatus;
+  frontImageKey: string | null;
+  backImageKey: string | null;
+  condition: string | null;
+  isAutographed: boolean;
+  autographFormat: string | null;
+  isForTrade: boolean;
+  isForSale: boolean;
+  askingPriceCents: number | null;
+  priority: number | null;
+  notes: string | null;
   gradeEstimate: string | null;
+  confidence: number | null;
+  scanJobId: number | null;
+  createdAt: string;
+  updatedAt: string;
 };
+
+export type CardListItem = {
+  id: number;
+  title: string;
+  subtitle: string;
+  imageUrl: string | null;
+  collectionStatus: CollectionStatus;
+  definition: CardDefinition;
+  record: CardCollectionRecord;
+};
+
+export type CardDetail = CardListItem;
 
 const API_BASE = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1`;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, init);
+  const response = await fetch(`${API_BASE}${path}`, {
+    credentials: 'include',
+    ...init,
+    headers: {
+      ...(init?.headers ?? {}),
+    },
+  });
 
   if (!response.ok) {
+    let message = `Request failed: ${response.status}`;
     const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+    try {
+      const parsed = text ? JSON.parse(text) : null;
+      message = parsed?.message ?? parsed?.error ?? message;
+    } catch {
+      if (text) {
+        message = text;
+      }
+    }
+    throw new Error(message);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return response.json() as Promise<T>;
+}
+
+export async function getCurrentSession(): Promise<AuthSession> {
+  return request<AuthSession>('/auth/me');
+}
+
+export async function signup(payload: {
+  username: string;
+  email: string;
+  password: string;
+}): Promise<AuthSession> {
+  return request<AuthSession>('/auth/signup', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function login(payload: {
+  email: string;
+  password: string;
+}): Promise<AuthSession> {
+  return request<AuthSession>('/auth/login', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function logout(): Promise<AuthSession> {
+  return request<AuthSession>('/auth/logout', {
+    method: 'POST',
+  });
 }
 
 export async function uploadScan(input: {
@@ -103,6 +228,7 @@ export async function confirmScan(
 export async function listCards(params: {
   q?: string;
   collectionStatus?: CollectionStatus | 'ALL';
+  queryMode?: CardQueryMode;
 }) {
   const searchParams = new URLSearchParams();
 
@@ -114,9 +240,13 @@ export async function listCards(params: {
     searchParams.set('collectionStatus', params.collectionStatus);
   }
 
+  if (params.queryMode) {
+    searchParams.set('queryMode', params.queryMode);
+  }
+
   const suffix = searchParams.toString();
   return request<{
-    items: CardRecord[];
+    items: CardListItem[];
     pagination: {
       page: number;
       pageSize: number;
@@ -138,38 +268,51 @@ export async function importCardsCsv(file: File): Promise<{
   const form = new FormData();
   form.append('file', file);
 
-  return request<{
-    summary: {
-      totalRows: number;
-      createdCount: number;
-      updatedCount: number;
-      skippedCount: number;
-      errorCount: number;
-    };
-  }>('/import/cards/csv', {
+  return request('/import/cards/csv', {
     method: 'POST',
     body: form,
   });
 }
 
-export async function getCard(cardId: number): Promise<CardRecord> {
-  return request<CardRecord>(`/cards/${cardId}`);
+export async function getCard(cardId: number): Promise<CardDetail> {
+  return request<CardDetail>(`/cards/${cardId}`);
 }
 
 export async function updateCard(
   cardId: number,
   payload: Partial<{
     name: string;
-    set: string | null;
-    year: number | null;
+    brand: string | null;
+    setName: string | null;
+    legacySetText: string | null;
+    season: string | null;
+    cardNumber: string | null;
+    yearManufactured: number | null;
     player: string | null;
     variant: string | null;
     sport: string | null;
+    category: string | null;
+    subcategory: string | null;
+    originalOrReprint: string | null;
+    parallelOrVariety: string | null;
+    setType: string | null;
+    insertSetName: string | null;
+    cardType: string | null;
+    hasAutographVariant: boolean;
+    isVintage: boolean;
     collectionStatus: CollectionStatus;
+    condition: string | null;
+    isAutographed: boolean;
+    autographFormat: string | null;
+    isForTrade: boolean;
+    isForSale: boolean;
+    askingPriceCents: number | null;
+    priority: number | null;
+    notes: string | null;
     gradeEstimate: string | null;
   }>,
-): Promise<CardRecord> {
-  return request<CardRecord>(`/cards/${cardId}`, {
+): Promise<CardDetail> {
+  return request<CardDetail>(`/cards/${cardId}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',

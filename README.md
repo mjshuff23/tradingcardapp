@@ -13,8 +13,8 @@ Roadmap from MVP to end-state is documented in `roadmap.md`.
 
 ## Prerequisites
 
-- Node.js 20+
-- npm 11+
+- Node.js 22+
+- npm 10+
 - Docker + Docker Compose
 
 ## Environment
@@ -62,6 +62,13 @@ npm run dev:docker:build
 npm run stop:local
 ```
 
+### Terraform scaffold checks
+
+```bash
+npm run infra:terraform:fmt
+npm run infra:terraform:validate
+```
+
 ### Clear stale dev cache/ownership artifacts
 
 ```bash
@@ -82,6 +89,10 @@ npm run clean:dev-cache
 
 Base URL: `http://localhost:3001/api/v1`
 
+- `POST /auth/signup`
+- `POST /auth/login`
+- `POST /auth/logout`
+- `GET /auth/me`
 - `POST /scans` (multipart upload: `image` required, `backImage` optional)
 - `GET /scans/:scanId`
 - `POST /scans/:scanId/confirm`
@@ -97,6 +108,8 @@ Health endpoint stays outside prefix:
 Swagger docs:
 
 - `GET http://localhost:3001/api/docs`
+
+Auth now uses an HttpOnly cookie named `trading_card_session`. Guests can browse the demo binder, but scans, imports, and card edits require login.
 
 ## Prisma
 
@@ -129,6 +142,35 @@ Typecheck both apps:
 ```bash
 npm run typecheck
 ```
+
+## AWS / Terraform
+
+Terraform scaffolding for the AWS move now lives in `infra/terraform`.
+
+It provisions:
+
+- one private bucket for profile images
+- one private bucket for card media
+- versioning, public-access blocks, lifecycle cleanup, and CORS configuration
+- IAM policy document outputs scoped to `profiles/`, `user-cards/`, and `canonical-cards/`
+
+Example flow:
+
+```bash
+cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
+npm run infra:terraform:fmt
+npm run infra:terraform:validate
+terraform -chdir=infra/terraform plan
+```
+
+Backend env wiring for AWS-compatible storage:
+
+- `S3_ENDPOINT` stays optional so local Garage keeps working
+- `S3_PROFILE_BUCKET`
+- `S3_CARD_BUCKET`
+- `S3_ACCESS_KEY`
+- `S3_SECRET_KEY`
+- `S3_REGION`
 
 ## Notes
 

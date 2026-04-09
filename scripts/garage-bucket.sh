@@ -121,10 +121,14 @@ fi
 garage bucket allow --read --write --owner "$BUCKET_NAME" --key "$ACCESS_KEY"
 
 update_env_file "$ROOT_DIR/.env" "S3_BUCKET" "$BUCKET_NAME"
+update_env_file "$ROOT_DIR/.env" "S3_PROFILE_BUCKET" "$BUCKET_NAME"
+update_env_file "$ROOT_DIR/.env" "S3_CARD_BUCKET" "$BUCKET_NAME"
 update_env_file "$ROOT_DIR/.env" "S3_ACCESS_KEY" "$ACCESS_KEY"
 update_env_file "$ROOT_DIR/.env" "S3_SECRET_KEY" "$SECRET_KEY"
 
 update_env_file "$ROOT_DIR/apps/backend/.env" "S3_BUCKET" "$BUCKET_NAME"
+update_env_file "$ROOT_DIR/apps/backend/.env" "S3_PROFILE_BUCKET" "$BUCKET_NAME"
+update_env_file "$ROOT_DIR/apps/backend/.env" "S3_CARD_BUCKET" "$BUCKET_NAME"
 update_env_file "$ROOT_DIR/apps/backend/.env" "S3_ACCESS_KEY" "$ACCESS_KEY"
 update_env_file "$ROOT_DIR/apps/backend/.env" "S3_SECRET_KEY" "$SECRET_KEY"
 

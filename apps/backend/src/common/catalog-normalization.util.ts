@@ -10,11 +10,25 @@ export const DEFAULT_LOCAL_USER = {
 
 export type CatalogDraftInput = {
   name: string;
+  brand?: string | null;
   set?: string | null;
+  setName?: string | null;
   year?: number | null;
+  yearManufactured?: number | null;
   player?: string | null;
   variant?: string | null;
   sport?: string | null;
+  season?: string | null;
+  cardNumber?: string | null;
+  category?: string | null;
+  subcategory?: string | null;
+  hasAutographVariant?: boolean | null;
+  originalOrReprint?: string | null;
+  parallelOrVariety?: string | null;
+  setType?: string | null;
+  insertSetName?: string | null;
+  cardType?: string | null;
+  isVintage?: boolean | null;
 };
 
 const BRAND_KEYWORDS = [
@@ -151,15 +165,18 @@ export function buildNormalizedCardKey(input: {
 }
 
 export function deriveCatalogDraft(input: CatalogDraftInput) {
-  const setValue = normalizeNullableText(input.set);
-  const yearValue = normalizeNullableNumber(input.year);
+  const setValue = normalizeNullableText(input.set ?? input.setName);
+  const explicitSetName = normalizeNullableText(input.setName);
+  const explicitBrand = normalizeNullableText(input.brand);
+  const yearValue = normalizeNullableNumber(input.yearManufactured ?? input.year);
   const sportValue = normalizeNullableText(input.sport);
   const playerValue = normalizeNullableText(input.player);
   const variantValue = normalizeNullableText(input.variant);
-  const brandValue = inferBrand(setValue);
-  const setNameValue = setValue;
-  const seasonValue = inferSeason(setValue, yearValue);
-  const cardNumberValue = inferCardNumber(input.name, setValue, input.variant);
+  const brandValue = explicitBrand ?? inferBrand(setValue);
+  const setNameValue = explicitSetName ?? setValue;
+  const seasonValue = normalizeNullableText(input.season) ?? inferSeason(setValue, yearValue);
+  const cardNumberValue =
+    normalizeNullableText(input.cardNumber) ?? inferCardNumber(input.name, setValue, input.variant);
   const normalizedSetKey = buildNormalizedSetKey({
     brand: brandValue,
     setName: setNameValue,
@@ -188,6 +205,15 @@ export function deriveCatalogDraft(input: CatalogDraftInput) {
     player: playerValue,
     variant: variantValue,
     cardNumber: cardNumberValue,
+    category: normalizeNullableText(input.category),
+    subcategory: normalizeNullableText(input.subcategory),
+    hasAutographVariant: Boolean(input.hasAutographVariant),
+    originalOrReprint: normalizeNullableText(input.originalOrReprint),
+    parallelOrVariety: normalizeNullableText(input.parallelOrVariety),
+    setType: normalizeNullableText(input.setType),
+    insertSetName: normalizeNullableText(input.insertSetName),
+    cardType: normalizeNullableText(input.cardType),
+    isVintage: Boolean(input.isVintage),
     normalizedSetKey,
     normalizedCardKey,
   };
