@@ -1,5 +1,6 @@
 import { CollectionStatus } from '../src/prisma/client';
 import { CatalogService } from '../src/catalog/catalog.service';
+import { CardSortBy, SortDirection } from '../src/catalog/dto/list-cards-query.dto';
 
 type CardSetRow = {
   id: string;
@@ -251,6 +252,7 @@ describe('CatalogService', () => {
       {} as never,
       catalogIndexService as never,
       catalogQueryService as never,
+      {} as never,
     );
 
     return {
@@ -290,5 +292,103 @@ describe('CatalogService', () => {
       cardDefinitionId: cardDefinition.id,
       gradeEstimate: 'Raw',
     });
+  });
+
+  it('keeps empty sort values last for both ascending and descending inventory sorts', async () => {
+    const createdAt = new Date('2026-04-08T12:00:00Z');
+    const updatedAt = new Date('2026-04-08T12:05:00Z');
+    const prisma = {
+      userCard: {
+        findMany: jest.fn(async () => [
+          {
+            id: 1,
+            userId,
+            cardDefinitionId: 'definition-1',
+            condition: 'Near Mint',
+            isAutographed: false,
+            autographFormat: null,
+            imageUrl: null,
+            originalImageKey: null,
+            thumbnailImageKey: null,
+            frontImageKey: null,
+            backImageKey: null,
+            isForTrade: false,
+            isForSale: false,
+            askingPriceCents: null,
+            notes: null,
+            gradeEstimate: 'BGS 9',
+            confidence: 0.8,
+            scanJobId: null,
+            createdAt,
+            updatedAt,
+            cardDefinition,
+          },
+          {
+            id: 2,
+            userId,
+            cardDefinitionId: 'definition-2',
+            condition: null,
+            isAutographed: false,
+            autographFormat: null,
+            imageUrl: null,
+            originalImageKey: null,
+            thumbnailImageKey: null,
+            frontImageKey: null,
+            backImageKey: null,
+            isForTrade: false,
+            isForSale: false,
+            askingPriceCents: null,
+            notes: null,
+            gradeEstimate: null,
+            confidence: 0.7,
+            scanJobId: null,
+            createdAt,
+            updatedAt: new Date('2026-04-09T12:05:00Z'),
+            cardDefinition: {
+              ...cardDefinition,
+              id: 'definition-2',
+              name: '1992 Upper Deck SPX',
+            },
+          },
+        ]),
+      },
+      userWishlist: {
+        findMany: jest.fn(async () => []),
+      },
+    };
+
+    const service = new CatalogService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      {
+        interpret: jest.fn(() => ({
+          text: null,
+          collectionStatus: undefined,
+          sport: null,
+          year: null,
+          vintageOnly: false,
+          autographedOnly: false,
+          forTradeOnly: false,
+          forSaleOnly: false,
+          wishlistPriority: null,
+        })),
+      } as never,
+      {} as never,
+    );
+
+    const ascending = await service.listCards({
+      userId,
+      sortBy: CardSortBy.GRADE_ESTIMATE,
+      sortDirection: SortDirection.ASC,
+    });
+    const descending = await service.listCards({
+      userId,
+      sortBy: CardSortBy.GRADE_ESTIMATE,
+      sortDirection: SortDirection.DESC,
+    });
+
+    expect(ascending.items.map((item) => item.id)).toEqual([1, 2]);
+    expect(descending.items.map((item) => item.id)).toEqual([1, 2]);
   });
 });

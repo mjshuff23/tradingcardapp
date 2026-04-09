@@ -6,15 +6,20 @@ import { AppShell } from '../../../components/AppShell';
 import { CardImage } from '../../../components/CardImage';
 import { PageHeader } from '../../../components/PageHeader';
 import { StatusPill } from '../../../components/StatusPill';
-import { SuggestionPreview } from '../../../components/SuggestionPreview';
+import {
+  SuggestionPreview,
+  SuggestionPreviewItem,
+} from '../../../components/SuggestionPreview';
 import { ThemedSelect, ThemedSelectOption } from '../../../components/ThemedSelect';
 import { useAuth } from '../../../lib/auth-context';
 import {
   CardTaxonomy,
   CollectionStatus,
+  EnrichScanCandidateResult,
   ScanCandidate,
   ScanResponse,
   confirmScan,
+  enrichScanCandidate,
   getCardTaxonomy,
   getScan,
   normalizeCardTitle,
@@ -149,6 +154,7 @@ function applyNormalization(
 }
 
 const NORMALIZATION_FIELD_LABELS: Record<string, string> = {
+  set: 'Legacy set text',
   name: 'Card name',
   player: 'Player',
   brand: 'Brand',
@@ -219,6 +225,110 @@ function subcategoryOptions(taxonomy: CardTaxonomy | null, category: string | nu
   return group ? group.subcategories.map((subcategory) => subcategory.name) : [];
 }
 
+type WebSuggestionState = {
+  items: Array<
+    SuggestionPreviewItem & {
+      fieldKey: keyof FinalizeFormState;
+      nextValue: FinalizeFormState[keyof FinalizeFormState];
+    }
+  >;
+  enrichment: EnrichScanCandidateResult;
+};
+
+function toEnrichmentDraft(form: FinalizeFormState) {
+  return {
+    name: form.name.trim() || null,
+    set: form.set.trim() || null,
+    setName: form.setName.trim() || null,
+    brand: form.brand.trim() || null,
+    year: parseOptionalNumber(form.year),
+    player: form.player.trim() || null,
+    variant: form.variant.trim() || null,
+    sport: form.sport.trim() || null,
+    cardNumber: form.cardNumber.trim() || null,
+    season: form.season.trim() || null,
+    category: form.category.trim() || null,
+    subcategory: form.subcategory.trim() || null,
+    hasAutographVariant: form.hasAutographVariant,
+    isVintage: form.isVintage,
+  };
+}
+
+function formatSuggestionValue(value: string | boolean | number | null | undefined) {
+  if (typeof value === 'boolean') {
+    return value ? 'Yes' : 'No';
+  }
+
+  if (value === null || value === undefined || value === '') {
+    return 'Empty';
+  }
+
+  return String(value);
+}
+
+function isBlankFormValue(value: FinalizeFormState[keyof FinalizeFormState]) {
+  return typeof value === 'string' ? !value.trim() : value === null || value === undefined;
+}
+
+function buildWebSuggestionState(
+  form: FinalizeFormState,
+  enrichment: EnrichScanCandidateResult,
+): {
+  nextForm: FinalizeFormState;
+  appliedCount: number;
+  suggestion: WebSuggestionState | null;
+} {
+  const nextForm = { ...form };
+  const suggestionItems: WebSuggestionState['items'] = [];
+  let appliedCount = 0;
+
+  for (const [fieldKey, rawValue] of Object.entries(enrichment.fields)) {
+    const key = fieldKey as keyof FinalizeFormState;
+    const confidence = enrichment.fieldConfidence[fieldKey] ?? enrichment.confidence;
+
+    if (!(key in form) || rawValue === null || rawValue === undefined || rawValue === '') {
+      continue;
+    }
+
+    const nextValue =
+      key === 'year'
+        ? String(rawValue)
+        : (rawValue as FinalizeFormState[keyof FinalizeFormState]);
+    const currentValue = form[key];
+
+    if (
+      typeof currentValue !== 'boolean' &&
+      isBlankFormValue(currentValue) &&
+      confidence >= 0.7
+    ) {
+      (nextForm as Record<string, unknown>)[key] = nextValue;
+      appliedCount += 1;
+      continue;
+    }
+
+    if (currentValue !== nextValue && confidence >= 0.6) {
+      suggestionItems.push({
+        fieldKey: key,
+        field: NORMALIZATION_FIELD_LABELS[fieldKey] ?? fieldKey,
+        previous: formatSuggestionValue(currentValue as string | boolean | number | null | undefined),
+        next: formatSuggestionValue(nextValue as string | boolean | number | null | undefined),
+        nextValue,
+      });
+    }
+  }
+
+  return {
+    nextForm,
+    appliedCount,
+    suggestion: suggestionItems.length
+      ? {
+          items: suggestionItems,
+          enrichment,
+        }
+      : null,
+  };
+}
+
 export default function FinalizeScanPage() {
   const router = useRouter();
   const { authenticated, loading } = useAuth();
@@ -245,10 +355,15 @@ export default function FinalizeScanPage() {
   const [pendingSuggestion, setPendingSuggestion] = useState<Awaited<
     ReturnType<typeof normalizeCardTitle>
   > | null>(null);
+  const [webSuggestion, setWebSuggestion] = useState<WebSuggestionState | null>(null);
+  const [acceptedEnrichment, setAcceptedEnrichment] =
+    useState<EnrichScanCandidateResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [loadingState, setLoadingState] = useState(true);
   const [normalizing, setNormalizing] = useState(false);
+  const [enriching, setEnriching] = useState(false);
   const [parserMessage, setParserMessage] = useState<string | null>(null);
+  const [enrichmentMessage, setEnrichmentMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const selectedCandidate = useMemo(() => {
@@ -262,6 +377,38 @@ export default function FinalizeScanPage() {
 
     return scan.candidates[0] ?? null;
   }, [candidateId, scan]);
+
+  const runWebEnrichment = async (baseForm: FinalizeFormState, candidate: ScanCandidate) => {
+    if (!scanId) {
+      return;
+    }
+
+    setEnriching(true);
+
+    try {
+      const enrichment = await enrichScanCandidate(scanId, candidate.id, {
+        draft: toEnrichmentDraft(baseForm),
+      });
+      const outcome = buildWebSuggestionState(baseForm, enrichment);
+
+      setForm(outcome.nextForm);
+      setWebSuggestion(outcome.suggestion);
+      if (outcome.appliedCount > 0) {
+        setAcceptedEnrichment(enrichment);
+      }
+      setEnrichmentMessage(
+        outcome.appliedCount > 0
+          ? `Web metadata auto-filled ${outcome.appliedCount} blank field(s) from ${enrichment.provider}.`
+          : outcome.suggestion
+            ? `Web metadata found reviewable field suggestions from ${enrichment.provider}.`
+            : `Web metadata found no higher-confidence additions from ${enrichment.provider}.`,
+      );
+    } catch (enrichmentError) {
+      setEnrichmentMessage(`Web metadata refresh failed: ${(enrichmentError as Error).message}`);
+    } finally {
+      setEnriching(false);
+    }
+  };
 
   useEffect(() => {
     if (!authenticated || !scanId || Number.isNaN(scanId)) {
@@ -312,12 +459,14 @@ export default function FinalizeScanPage() {
           return;
         }
 
-        setForm(applyNormalization(initial, normalized));
+        const normalizedForm = applyNormalization(initial, normalized);
+        setForm(normalizedForm);
         setParserMessage(
           normalized.usedAi
             ? `AI refinement applied at ${normalized.confidence.toFixed(3)} confidence.`
             : `Parser suggestions loaded at ${normalized.confidence.toFixed(3)} confidence.`,
         );
+        await runWebEnrichment(normalizedForm, candidate);
       } catch (loadError) {
         if (!stopped) {
           setError((loadError as Error).message);
@@ -431,6 +580,18 @@ export default function FinalizeScanPage() {
               ? parseOptionalNumber(form.priority)
               : null,
         },
+        enrichment: acceptedEnrichment
+          ? {
+              provider: acceptedEnrichment.provider,
+              fields: acceptedEnrichment.fields,
+              fieldConfidence: acceptedEnrichment.fieldConfidence,
+              confidence: acceptedEnrichment.confidence,
+              usedAi: acceptedEnrichment.usedAi,
+              queries: acceptedEnrichment.queries,
+              sources: acceptedEnrichment.sources,
+              debug: acceptedEnrichment.debug,
+            }
+          : undefined,
       });
 
       await router.push(`/cards/${created.id}`);
@@ -449,6 +610,22 @@ export default function FinalizeScanPage() {
     setForm(applyNormalization(form, pendingSuggestion));
     setPendingSuggestion(null);
     setParserMessage('Suggested fields applied to the draft.');
+  };
+
+  const applyWebSuggestion = () => {
+    if (!form || !webSuggestion) {
+      return;
+    }
+
+    const nextForm = { ...form };
+    for (const item of webSuggestion.items) {
+      (nextForm as Record<string, unknown>)[item.fieldKey] = item.nextValue;
+    }
+
+    setForm(nextForm);
+    setAcceptedEnrichment(webSuggestion.enrichment);
+    setWebSuggestion(null);
+    setEnrichmentMessage('Accepted the current web metadata suggestions into the draft.');
   };
 
   const isWanted = form?.collectionStatus === 'WANTED';
@@ -496,6 +673,7 @@ export default function FinalizeScanPage() {
         {loadingState ? <p className="message">Loading selected candidate...</p> : null}
         {error ? <p className="message message--error">{error}</p> : null}
         {parserMessage ? <p className="message">{parserMessage}</p> : null}
+        {enrichmentMessage ? <p className="message">{enrichmentMessage}</p> : null}
 
         {scan && selectedCandidate && form ? (
           <form className="stack" onSubmit={handleSubmit}>
@@ -512,6 +690,22 @@ export default function FinalizeScanPage() {
                 applyLabel="Apply suggestions"
                 onApply={applyPendingSuggestion}
                 onDismiss={() => setPendingSuggestion(null)}
+              />
+            ) : null}
+
+            {webSuggestion ? (
+              <SuggestionPreview
+                title="Web metadata preview"
+                subtitle={
+                  webSuggestion.enrichment.usedAi
+                    ? `Web search + AI suggested ${webSuggestion.items.length} additional field change(s).`
+                    : `Web evidence suggested ${webSuggestion.items.length} additional field change(s).`
+                }
+                items={webSuggestion.items}
+                emptyMessage="No extra web metadata suggestions are pending."
+                applyLabel="Apply web metadata"
+                onApply={applyWebSuggestion}
+                onDismiss={() => setWebSuggestion(null)}
               />
             ) : null}
 
@@ -547,9 +741,24 @@ export default function FinalizeScanPage() {
                   <h2>Cleanup assistant</h2>
                   <p className="fine-print">Use the parser now so the first saved record starts cleaner than the raw OCR/candidate text.</p>
                 </div>
-                <button className="button-secondary" type="button" onClick={() => void handleNormalize()} disabled={normalizing}>
-                  {normalizing ? 'Refreshing...' : 'Suggest fields'}
-                </button>
+                <div className="action-row">
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={() => void handleNormalize()}
+                    disabled={normalizing}
+                  >
+                    {normalizing ? 'Refreshing...' : 'Suggest fields'}
+                  </button>
+                  <button
+                    className="button-secondary"
+                    type="button"
+                    onClick={() => void runWebEnrichment(form, selectedCandidate)}
+                    disabled={enriching}
+                  >
+                    {enriching ? 'Searching...' : 'Refresh web metadata'}
+                  </button>
+                </div>
               </div>
 
               <div className="field-grid">

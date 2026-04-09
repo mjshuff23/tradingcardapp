@@ -30,10 +30,15 @@ import { UploadedFileFields } from '../common/uploaded-file.type';
 import { User } from '../prisma/client';
 import { ConfirmScanDto } from './dto/confirm-scan.dto';
 import {
+  EnrichScanCandidateRequestDto,
+  EnrichScanCandidateResponseDto,
+} from './dto/enrich-scan-candidate.dto';
+import {
   ConfirmScanResponseDto,
   CreateScanResponseDto,
   ScanResponseDto,
 } from './dto/scan-response.dto';
+import { ScanEnrichmentService } from './scan-enrichment.service';
 import { ScanService } from './scan.service';
 
 @ApiTags('Scans')
@@ -41,7 +46,10 @@ import { ScanService } from './scan.service';
 @UseGuards(RequireSessionGuard)
 @Controller('scans')
 export class ScanController {
-  constructor(private readonly scanService: ScanService) {}
+  constructor(
+    private readonly scanService: ScanService,
+    private readonly scanEnrichmentService: ScanEnrichmentService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Upload an image and create a scan job' })
@@ -121,6 +129,20 @@ export class ScanController {
     res.setHeader('Content-Type', image.contentType);
     res.setHeader('Cache-Control', 'public, max-age=43200');
     res.send(image.buffer);
+  }
+
+  @Post(':scanId/candidates/:candidateId/enrich')
+  @ApiOperation({ summary: 'Enrich a chosen scan candidate with web metadata evidence' })
+  @ApiOkResponse({ type: EnrichScanCandidateResponseDto })
+  @ApiBadRequestResponse({ description: 'Invalid enrichment payload.' })
+  @ApiNotFoundResponse({ description: 'Scan candidate not found.' })
+  async enrichCandidate(
+    @Param('scanId', ParseIntPipe) scanId: number,
+    @Param('candidateId', ParseIntPipe) candidateId: number,
+    @CurrentUser() user: User,
+    @Body() body: EnrichScanCandidateRequestDto,
+  ) {
+    return this.scanEnrichmentService.enrichCandidate(scanId, candidateId, user.id, body.draft);
   }
 
   @Post(':scanId/confirm')

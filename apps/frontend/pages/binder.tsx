@@ -10,12 +10,53 @@ import { useAuth } from '../lib/auth-context';
 import {
   CardListItem,
   CardQueryMode,
+  CardSortBy,
   CollectionStatus,
+  SortDirection,
   importCardsCsv,
   listCards,
 } from '../lib/api';
 
 type Filter = CollectionStatus | 'ALL';
+
+type BinderQueryState = {
+  q: string;
+  queryMode: CardQueryMode;
+  filter: Filter;
+  sortBy: CardSortBy;
+  sortDirection: SortDirection;
+};
+
+type InteractivePill = {
+  label: string;
+  patch: Partial<BinderQueryState>;
+  tone?: 'neutral' | 'success' | 'accent' | 'danger';
+};
+
+const SORT_OPTIONS: Array<{ value: CardSortBy; label: string }> = [
+  { value: 'updatedAt', label: 'Recently updated' },
+  { value: 'title', label: 'Card title' },
+  { value: 'player', label: 'Player' },
+  { value: 'brand', label: 'Brand' },
+  { value: 'setName', label: 'Set name' },
+  { value: 'yearManufactured', label: 'Year' },
+  { value: 'season', label: 'Season' },
+  { value: 'cardNumber', label: 'Card number' },
+  { value: 'sport', label: 'Sport' },
+  { value: 'category', label: 'Category' },
+  { value: 'subcategory', label: 'Subcategory' },
+  { value: 'cardType', label: 'Card type' },
+  { value: 'collectionStatus', label: 'Collection status' },
+  { value: 'condition', label: 'Condition' },
+  { value: 'gradeEstimate', label: 'Grade estimate' },
+  { value: 'isAutographed', label: 'Signed copy' },
+  { value: 'isForTrade', label: 'Trade flag' },
+  { value: 'isForSale', label: 'Sale flag' },
+  { value: 'askingPriceCents', label: 'Asking price' },
+  { value: 'priority', label: 'Wishlist priority' },
+  { value: 'confidence', label: 'Confidence' },
+  { value: 'createdAt', label: 'Created date' },
+];
 
 function formatCurrency(cents: number | null) {
   if (cents === null) {
@@ -28,44 +69,160 @@ function formatCurrency(cents: number | null) {
   }).format(cents / 100);
 }
 
-function buildSignals(card: CardListItem) {
-  return [
-    card.imageSource !== 'NONE' ? `Image ${card.imageSource.toLowerCase()}` : null,
-    card.definition.cardSet?.sport,
-    card.definition.category,
-    card.definition.subcategory,
-    card.definition.isVintage ? 'Vintage' : null,
-    card.record.isAutographed ? 'Autographed' : null,
-  ].filter(Boolean) as string[];
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(value));
 }
 
-function buildMarketState(card: CardListItem) {
-  const states = [];
+function buildSignals(card: CardListItem): InteractivePill[] {
+  return [
+    card.definition.player
+      ? {
+          label: `Player: ${card.definition.player}`,
+          patch: {
+            q: card.definition.player,
+            sortBy: 'player',
+            sortDirection: 'asc',
+          },
+        }
+      : null,
+    card.definition.cardSet?.sport
+      ? {
+          label: card.definition.cardSet.sport,
+          patch: {
+            q: card.definition.cardSet.sport,
+            sortBy: 'sport',
+            sortDirection: 'asc',
+          },
+        }
+      : null,
+    card.definition.category
+      ? {
+          label: card.definition.category,
+          patch: {
+            q: card.definition.category,
+            sortBy: 'category',
+            sortDirection: 'asc',
+          },
+        }
+      : null,
+    card.definition.subcategory
+      ? {
+          label: card.definition.subcategory,
+          patch: {
+            q: card.definition.subcategory,
+            sortBy: 'subcategory',
+            sortDirection: 'asc',
+          },
+        }
+      : null,
+    card.definition.cardType
+      ? {
+          label: card.definition.cardType,
+          patch: {
+            q: card.definition.cardType,
+            sortBy: 'cardType',
+            sortDirection: 'asc',
+          },
+        }
+      : null,
+    card.definition.isVintage
+      ? {
+          label: 'Vintage',
+          patch: {
+            sortBy: 'yearManufactured',
+            sortDirection: 'asc',
+          },
+        }
+      : null,
+    card.record.isAutographed
+      ? {
+          label: 'Autographed copy',
+          patch: {
+            sortBy: 'isAutographed',
+            sortDirection: 'desc',
+          },
+        }
+      : null,
+  ].filter(Boolean) as InteractivePill[];
+}
+
+function buildMarketState(card: CardListItem): InteractivePill[] {
+  const states: InteractivePill[] = [];
 
   if (card.record.isForSale) {
-    states.push(formatCurrency(card.record.askingPriceCents) ?? 'For sale');
+    states.push({
+      label: formatCurrency(card.record.askingPriceCents) ?? 'For sale',
+      tone: 'success',
+      patch: {
+        sortBy: 'askingPriceCents',
+        sortDirection: 'desc',
+      },
+    });
   }
 
   if (card.record.isForTrade) {
-    states.push('Open to trade');
+    states.push({
+      label: 'Open to trade',
+      tone: 'accent',
+      patch: {
+        sortBy: 'isForTrade',
+        sortDirection: 'desc',
+      },
+    });
   }
 
   if (card.collectionStatus === 'WANTED' && card.record.priority !== null) {
-    states.push(`Wishlist P${card.record.priority}`);
+    states.push({
+      label: `Wishlist P${card.record.priority}`,
+      tone: 'accent',
+      patch: {
+        filter: 'WANTED',
+        sortBy: 'priority',
+        sortDirection: 'asc',
+      },
+    });
   }
 
   if (card.record.gradeEstimate) {
-    states.push(`Grade ${card.record.gradeEstimate}`);
+    states.push({
+      label: `Grade ${card.record.gradeEstimate}`,
+      patch: {
+        sortBy: 'gradeEstimate',
+        sortDirection: 'asc',
+      },
+    });
   }
 
   return states;
 }
 
+function buildInventoryFacts(card: CardListItem) {
+  return [
+    card.definition.cardSet?.setName ?? card.definition.legacySetText,
+    card.definition.cardSet?.brand,
+    card.definition.cardSet?.season ?? card.definition.cardSet?.yearManufactured,
+    card.definition.cardNumber ? `#${card.definition.cardNumber}` : null,
+    card.definition.variant,
+  ].filter(Boolean);
+}
+
+function defaultDirectionFor(field: CardSortBy): SortDirection {
+  return field === 'updatedAt' || field === 'createdAt' ? 'desc' : 'asc';
+}
+
 export default function BinderPage() {
   const { authenticated, loading } = useAuth();
-  const [q, setQ] = useState('');
-  const [queryMode, setQueryMode] = useState<CardQueryMode>('text');
-  const [filter, setFilter] = useState<Filter>('ALL');
+  const [queryState, setQueryState] = useState<BinderQueryState>({
+    q: '',
+    queryMode: 'text',
+    filter: 'ALL',
+    sortBy: 'updatedAt',
+    sortDirection: 'desc',
+  });
   const [cards, setCards] = useState<CardListItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,15 +236,17 @@ export default function BinderPage() {
     (card) => card.record.isForSale || card.record.isForTrade,
   ).length;
 
-  const fetchCards = async () => {
+  const loadCards = async (nextState: BinderQueryState) => {
     setBusy(true);
     setError(null);
 
     try {
       const response = await listCards({
-        q: q || undefined,
-        collectionStatus: filter,
-        queryMode,
+        q: nextState.q || undefined,
+        collectionStatus: nextState.filter,
+        queryMode: nextState.queryMode,
+        sortBy: nextState.sortBy,
+        sortDirection: nextState.sortDirection,
       });
       setCards(response.items);
       setTotal(response.pagination.total);
@@ -99,13 +258,37 @@ export default function BinderPage() {
   };
 
   useEffect(() => {
-    void fetchCards();
+    void loadCards(queryState);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const syncStateAndReload = async (patch: Partial<BinderQueryState>) => {
+    const nextState = {
+      ...queryState,
+      ...patch,
+    };
+
+    setQueryState(nextState);
+    await loadCards(nextState);
+  };
+
   const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await fetchCards();
+    await loadCards(queryState);
+  };
+
+  const handleSortHeader = async (field: CardSortBy) => {
+    const nextDirection =
+      queryState.sortBy === field
+        ? queryState.sortDirection === 'asc'
+          ? 'desc'
+          : 'asc'
+        : defaultDirectionFor(field);
+
+    await syncStateAndReload({
+      sortBy: field,
+      sortDirection: nextDirection,
+    });
   };
 
   const handleCsvImport = async (file: File | null) => {
@@ -121,7 +304,7 @@ export default function BinderPage() {
       setCsvMessage(
         `Imported ${result.summary.createdCount} new rows, updated ${result.summary.updatedCount}, skipped ${result.summary.skippedCount}.`,
       );
-      await fetchCards();
+      await loadCards(queryState);
     } catch (importError) {
       setCsvMessage((importError as Error).message);
     } finally {
@@ -137,16 +320,16 @@ export default function BinderPage() {
 
       <div className="stack fade-up">
         <PageHeader
-          eyebrow="Binder"
-          title="Search the binder like a collection, not a flat spreadsheet."
-          description="Text and natural-language search now ride the richer catalog model. Guests can browse the seeded demo binder, while signed-in collectors can import and edit their own records."
+          eyebrow="Inventory"
+          title="Search the inventory like a collection, not a flat spreadsheet."
+          description="The binder route now behaves like a real inventory surface: richer card metadata, sortable rows, and fast filters that turn a detail into the next view."
           actions={
             <div className="action-row">
               <Link className="button" href={authenticated ? '/scan' : '/login'}>
                 {authenticated ? 'Scan a card' : 'Log in to scan'}
               </Link>
               <StatusPill
-                label={authenticated ? 'Private binder' : loading ? 'Checking session' : 'Demo binder'}
+                label={authenticated ? 'Private inventory' : loading ? 'Checking session' : 'Demo inventory'}
                 tone={authenticated ? 'success' : 'accent'}
               />
             </div>
@@ -162,10 +345,12 @@ export default function BinderPage() {
               <input
                 id="binder-search"
                 className="search-input"
-                value={q}
-                onChange={(event) => setQ(event.target.value)}
+                value={queryState.q}
+                onChange={(event) =>
+                  setQueryState((current) => ({ ...current, q: event.target.value }))
+                }
                 placeholder={
-                  queryMode === 'nl'
+                  queryState.queryMode === 'nl'
                     ? 'Try: Michael Jordan #466 Upper Deck 1993-94'
                     : 'Search by player, set, card number, or brand'
                 }
@@ -177,8 +362,10 @@ export default function BinderPage() {
                 Query mode
               </label>
               <ThemedSelect
-                value={queryMode}
-                onChange={(nextValue) => setQueryMode(nextValue as CardQueryMode)}
+                value={queryState.queryMode}
+                onChange={(nextValue) =>
+                  void syncStateAndReload({ queryMode: nextValue as CardQueryMode })
+                }
                 options={[
                   { value: 'text', label: 'Text' },
                   { value: 'nl', label: 'Natural language' },
@@ -191,12 +378,46 @@ export default function BinderPage() {
                 Status
               </label>
               <ThemedSelect
-                value={filter}
-                onChange={(nextValue) => setFilter(nextValue as Filter)}
+                value={queryState.filter}
+                onChange={(nextValue) =>
+                  void syncStateAndReload({ filter: nextValue as Filter })
+                }
                 options={[
                   { value: 'ALL', label: 'All statuses' },
                   { value: 'OWNED', label: 'Owned' },
                   { value: 'WANTED', label: 'Wanted' },
+                ]}
+              />
+            </div>
+
+            <div className="toolbar__group">
+              <label className="toolbar-label" htmlFor="binder-sort">
+                Sort by
+              </label>
+              <ThemedSelect
+                value={queryState.sortBy}
+                onChange={(nextValue) =>
+                  void syncStateAndReload({
+                    sortBy: nextValue as CardSortBy,
+                    sortDirection: defaultDirectionFor(nextValue as CardSortBy),
+                  })
+                }
+                options={SORT_OPTIONS}
+              />
+            </div>
+
+            <div className="toolbar__group">
+              <label className="toolbar-label" htmlFor="binder-direction">
+                Direction
+              </label>
+              <ThemedSelect
+                value={queryState.sortDirection}
+                onChange={(nextValue) =>
+                  void syncStateAndReload({ sortDirection: nextValue as SortDirection })
+                }
+                options={[
+                  { value: 'asc', label: 'Ascending' },
+                  { value: 'desc', label: 'Descending' },
                 ]}
               />
             </div>
@@ -229,7 +450,7 @@ export default function BinderPage() {
             <div>
               <h2>Bulk import</h2>
               <p className="fine-print">
-                Signed-in collectors can import CSV rows into their own binder without losing scan-first workflows.
+                Signed-in collectors can import CSV rows into their own inventory without losing the scan-first workflow.
               </p>
             </div>
 
@@ -260,21 +481,77 @@ export default function BinderPage() {
             <div>
               <h2>Catalog view</h2>
               <p className="fine-print">
-                Each row now keeps set metadata, market state, and ownership context intact instead of flattening everything into a couple strings.
+                Sort across identity, market, and collection-state fields, then tap the pills inside each row to turn details into the next filtered view.
               </p>
             </div>
           </div>
 
-          <div className="table-scroll">
+          <div className="table-scroll binder-table">
             <table className="data-table">
               <thead>
                 <tr>
                   <th>Image</th>
-                  <th>Card</th>
-                  <th>Set</th>
-                  <th>Signals</th>
-                  <th>Market</th>
-                  <th>Status</th>
+                  <th>
+                    <button
+                      className="table-sort-button"
+                      type="button"
+                      onClick={() => void handleSortHeader('title')}
+                    >
+                      <span>Card</span>
+                      {queryState.sortBy === 'title' ? (
+                        <small>{queryState.sortDirection === 'asc' ? '▲' : '▼'}</small>
+                      ) : null}
+                    </button>
+                  </th>
+                  <th>
+                    <button
+                      className="table-sort-button"
+                      type="button"
+                      onClick={() => void handleSortHeader('setName')}
+                    >
+                      <span>Set</span>
+                      {queryState.sortBy === 'setName' ? (
+                        <small>{queryState.sortDirection === 'asc' ? '▲' : '▼'}</small>
+                      ) : null}
+                    </button>
+                  </th>
+                  <th>Traits</th>
+                  <th>
+                    <button
+                      className="table-sort-button"
+                      type="button"
+                      onClick={() => void handleSortHeader('askingPriceCents')}
+                    >
+                      <span>Market</span>
+                      {queryState.sortBy === 'askingPriceCents' ? (
+                        <small>{queryState.sortDirection === 'asc' ? '▲' : '▼'}</small>
+                      ) : null}
+                    </button>
+                  </th>
+                  <th>
+                    <button
+                      className="table-sort-button"
+                      type="button"
+                      onClick={() => void handleSortHeader('collectionStatus')}
+                    >
+                      <span>Status</span>
+                      {queryState.sortBy === 'collectionStatus' ? (
+                        <small>{queryState.sortDirection === 'asc' ? '▲' : '▼'}</small>
+                      ) : null}
+                    </button>
+                  </th>
+                  <th>
+                    <button
+                      className="table-sort-button"
+                      type="button"
+                      onClick={() => void handleSortHeader('updatedAt')}
+                    >
+                      <span>Updated</span>
+                      {queryState.sortBy === 'updatedAt' ? (
+                        <small>{queryState.sortDirection === 'asc' ? '▲' : '▼'}</small>
+                      ) : null}
+                    </button>
+                  </th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -297,16 +574,9 @@ export default function BinderPage() {
                             {card.title}
                           </Link>
                           <span className="table-copy">
-                            {[
-                              card.definition.cardSet?.setName ?? card.definition.legacySetText,
-                              card.definition.cardSet?.season ??
-                                card.definition.cardSet?.yearManufactured,
-                              card.definition.cardNumber ? `#${card.definition.cardNumber}` : null,
-                            ]
-                              .filter(Boolean)
-                              .join(' · ') || 'Catalog metadata still filling in.'}
+                            {buildInventoryFacts(card).join(' · ') ||
+                              'Catalog metadata still filling in.'}
                           </span>
-                          {card.subtitle ? <span className="table-note">{card.subtitle}</span> : null}
                           {card.record.notes ? (
                             <span className="table-note">{card.record.notes}</span>
                           ) : null}
@@ -314,14 +584,20 @@ export default function BinderPage() {
                       </td>
                       <td>
                         <div className="table-stack">
-                          <strong>{setMeta?.setName ?? card.definition.legacySetText ?? 'Unknown set'}</strong>
+                          <StatusPill
+                            label={setMeta?.brand ?? 'Unknown brand'}
+                            onClick={() =>
+                              void syncStateAndReload({
+                                q: [setMeta?.brand, setMeta?.setName].filter(Boolean).join(' '),
+                              })
+                            }
+                          />
                           <span className="table-copy">
                             {[
-                              setMeta?.brand,
-                              setMeta?.yearManufactured,
-                              setMeta?.season,
-                              card.definition.cardNumber ? `#${card.definition.cardNumber}` : null,
+                              setMeta?.setName ?? card.definition.legacySetText,
+                              setMeta?.season ?? setMeta?.yearManufactured,
                               setMeta?.sport,
+                              card.definition.cardNumber ? `#${card.definition.cardNumber}` : null,
                             ]
                               .filter(Boolean)
                               .join(' · ') || 'Awaiting set metadata'}
@@ -332,7 +608,12 @@ export default function BinderPage() {
                         <div className="inline-pills">
                           {signals.length ? (
                             signals.map((signal) => (
-                              <StatusPill key={`${card.id}-${signal}`} label={signal} />
+                              <StatusPill
+                                key={`${card.id}-${signal.label}`}
+                                label={signal.label}
+                                tone={signal.tone}
+                                onClick={() => void syncStateAndReload(signal.patch)}
+                              />
                             ))
                           ) : (
                             <span className="table-copy">No extra signals</span>
@@ -344,9 +625,10 @@ export default function BinderPage() {
                           {marketState.length ? (
                             marketState.map((state) => (
                               <StatusPill
-                                key={`${card.id}-${state}`}
-                                label={state}
-                                tone={state.startsWith('$') ? 'success' : 'accent'}
+                                key={`${card.id}-${state.label}`}
+                                label={state.label}
+                                tone={state.tone}
+                                onClick={() => void syncStateAndReload(state.patch)}
                               />
                             ))
                           ) : (
@@ -359,11 +641,24 @@ export default function BinderPage() {
                           <StatusPill
                             label={card.collectionStatus}
                             tone={card.collectionStatus === 'OWNED' ? 'success' : 'accent'}
+                            onClick={() =>
+                              void syncStateAndReload({
+                                filter: card.collectionStatus,
+                              })
+                            }
                           />
                           <span className="table-copy">
                             {card.record.confidence !== null
                               ? `Confidence ${card.record.confidence.toFixed(3)}`
                               : 'No validation score'}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="table-stack">
+                          <strong>{formatDate(card.record.updatedAt)}</strong>
+                          <span className="table-copy">
+                            {card.record.condition ?? card.record.gradeEstimate ?? 'No condition notes'}
                           </span>
                         </div>
                       </td>
@@ -378,15 +673,123 @@ export default function BinderPage() {
 
                 {!cards.length ? (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={8}>
                       <div className="empty-state">
-                        No cards match this view yet. Try a broader query, switch to natural language, or add new cards from the scan flow.
+                        No cards match this view yet. Try a broader query, switch sort fields, or add new cards from the scan flow.
                       </div>
                     </td>
                   </tr>
                 ) : null}
               </tbody>
             </table>
+          </div>
+
+          <div className="binder-cards">
+            {cards.map((card) => {
+              const signals = buildSignals(card);
+              const marketState = buildMarketState(card);
+              const facts = buildInventoryFacts(card);
+
+              return (
+                <article className="inventory-card" key={`mobile-${card.id}`}>
+                  <div className="inventory-card__top">
+                    <div className="thumbnail-slot">
+                      <CardImage alt={`${card.title} thumbnail`} src={card.imageUrl} />
+                    </div>
+                    <div className="inventory-card__meta">
+                      <h3>
+                        <Link className="table-link" href={`/cards/${card.id}`}>
+                          {card.title}
+                        </Link>
+                      </h3>
+                      <div className="inventory-card__facts">
+                        <span>{facts.join(' · ') || 'Metadata still filling in.'}</span>
+                        <span>
+                          Updated {formatDate(card.record.updatedAt)}
+                          {card.record.confidence !== null
+                            ? ` · Confidence ${card.record.confidence.toFixed(3)}`
+                            : ''}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="inline-pills">
+                    <StatusPill
+                      label={card.collectionStatus}
+                      tone={card.collectionStatus === 'OWNED' ? 'success' : 'accent'}
+                      onClick={() =>
+                        void syncStateAndReload({
+                          filter: card.collectionStatus,
+                        })
+                      }
+                    />
+                    {card.definition.player ? (
+                      <StatusPill
+                        label={card.definition.player}
+                        onClick={() =>
+                          void syncStateAndReload({
+                            q: card.definition.player ?? '',
+                            sortBy: 'player',
+                            sortDirection: 'asc',
+                          })
+                        }
+                      />
+                    ) : null}
+                    {card.definition.cardSet?.brand ? (
+                      <StatusPill
+                        label={`${card.definition.cardSet.brand}${card.definition.cardSet.setName ? ` · ${card.definition.cardSet.setName}` : ''}`}
+                        onClick={() =>
+                          void syncStateAndReload({
+                            q: [card.definition.cardSet?.brand, card.definition.cardSet?.setName]
+                              .filter(Boolean)
+                              .join(' '),
+                          })
+                        }
+                      />
+                    ) : null}
+                  </div>
+
+                  {signals.length ? (
+                    <div className="inline-pills">
+                      {signals.map((signal) => (
+                        <StatusPill
+                          key={`signal-${card.id}-${signal.label}`}
+                          label={signal.label}
+                          tone={signal.tone}
+                          onClick={() => void syncStateAndReload(signal.patch)}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {marketState.length ? (
+                    <div className="inline-pills">
+                      {marketState.map((state) => (
+                        <StatusPill
+                          key={`market-${card.id}-${state.label}`}
+                          label={state.label}
+                          tone={state.tone}
+                          onClick={() => void syncStateAndReload(state.patch)}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="action-row">
+                    <Link className="button-secondary" href={`/cards/${card.id}`}>
+                      {authenticated ? 'Open editor' : 'View detail'}
+                    </Link>
+                  </div>
+                </article>
+              );
+            })}
+
+            {!cards.length ? (
+              <div className="empty-state">
+                No cards match this view yet. Try a broader query, change sort order, or add new cards from the scan flow.
+              </div>
+            ) : null}
           </div>
         </section>
       </div>

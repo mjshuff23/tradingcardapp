@@ -7,6 +7,7 @@ import { ValidationService } from '../validation/validation.service';
 import { LookupService } from '../lookup/lookup.service';
 import { ScanController } from './scan.controller';
 import { LinkPreviewService } from './link-preview.service';
+import { ScanEnrichmentService } from './scan-enrichment.service';
 import { ScanService } from './scan.service';
 
 @Module({
@@ -19,6 +20,7 @@ import { ScanService } from './scan.service';
     ValidationService,
     LookupService,
     LinkPreviewService,
+    ScanEnrichmentService,
   ],
   exports: [ScanService],
 })

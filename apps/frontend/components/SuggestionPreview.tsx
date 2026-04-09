@@ -1,4 +1,4 @@
-type SuggestionPreviewItem = {
+export type SuggestionPreviewItem = {
   field: string;
   previous: string;
   next: string;

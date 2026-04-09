@@ -12,6 +12,8 @@ describe('ScanService ranking', () => {
       new ValidationService(),
       {} as never,
       (linkPreviewService ?? {}) as never,
+      {} as never,
+      {} as never,
     );
   }
 

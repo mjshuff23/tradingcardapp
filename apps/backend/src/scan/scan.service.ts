@@ -314,6 +314,31 @@ export class ScanService {
     }
 
     const { cardDefinition } = await this.catalogIndexService.upsertCatalogNodes(merged);
+
+    if (dto.enrichment) {
+      const currentMetadata =
+        cardDefinition.metadata &&
+        typeof cardDefinition.metadata === 'object' &&
+        !Array.isArray(cardDefinition.metadata)
+          ? (cardDefinition.metadata as Prisma.JsonObject)
+          : {};
+
+      await this.prisma.cardDefinition.update({
+        where: { id: cardDefinition.id },
+        data: {
+          metadata: {
+            ...currentMetadata,
+            enrichment: {
+              ...(dto.enrichment as unknown as Prisma.JsonObject),
+              acceptedAt: new Date().toISOString(),
+              scanId,
+              candidateId: selectedCandidate.id,
+            },
+          },
+        },
+      });
+    }
+
     const confidence = Number(
       ((selectedCandidate.score + (selectedCandidate.validationScore ?? 0)) / 2).toFixed(3),
     );

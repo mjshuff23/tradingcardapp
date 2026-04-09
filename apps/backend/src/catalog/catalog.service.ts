@@ -12,7 +12,11 @@ import {
   CardImageSourceDto,
   CardListItemDto,
 } from './dto/card-response.dto';
-import { CardQueryMode } from './dto/list-cards-query.dto';
+import {
+  CardQueryMode,
+  CardSortBy,
+  SortDirection,
+} from './dto/list-cards-query.dto';
 import { NormalizeTitleFieldsDto } from './dto/normalize-title.dto';
 import { UpdateCardDto } from './dto/update-card.dto';
 import {
@@ -63,6 +67,8 @@ export class CatalogService {
     collectionStatus?: CollectionStatus;
     page?: number;
     pageSize?: number;
+    sortBy?: CardSortBy;
+    sortDirection?: SortDirection;
   }) {
     const page = params.page && params.page > 0 ? params.page : 1;
     const pageSize = params.pageSize && params.pageSize > 0 ? Math.min(params.pageSize, 100) : 25;
@@ -87,18 +93,19 @@ export class CatalogService {
     ]);
 
     const combined = [
-      ...owned.map((row) => ({
-        createdAt: row.createdAt,
-        item: this.toCardListItem({ kind: CollectionStatus.OWNED, row }),
-      })),
-      ...wanted.map((row) => ({
-        createdAt: row.createdAt,
-        item: this.toCardListItem({ kind: CollectionStatus.WANTED, row }),
-      })),
-    ].sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+      ...owned.map((row) => this.toCardListItem({ kind: CollectionStatus.OWNED, row })),
+      ...wanted.map((row) => this.toCardListItem({ kind: CollectionStatus.WANTED, row })),
+    ].sort((left, right) =>
+      this.compareCardItems(
+        left,
+        right,
+        params.sortBy ?? CardSortBy.UPDATED_AT,
+        params.sortDirection ?? SortDirection.DESC,
+      ),
+    );
 
     const total = combined.length;
-    const items = combined.slice((page - 1) * pageSize, page * pageSize).map((entry) => entry.item);
+    const items = combined.slice((page - 1) * pageSize, page * pageSize);
 
     return {
       items,
@@ -745,6 +752,135 @@ export class CatalogService {
 
   private toCardDetail(source: CardSource): CardDetailDto {
     return this.toCardListItem(source);
+  }
+
+  private compareCardItems(
+    left: CardListItemDto,
+    right: CardListItemDto,
+    sortBy: CardSortBy,
+    sortDirection: SortDirection,
+  ) {
+    const primary = this.compareSortValues(
+      this.readSortValue(left, sortBy),
+      this.readSortValue(right, sortBy),
+      sortDirection,
+    );
+
+    if (primary !== 0) {
+      return primary;
+    }
+
+    const updatedTieBreak = this.compareSortValues(
+      left.record.updatedAt,
+      right.record.updatedAt,
+      SortDirection.DESC,
+    );
+
+    if (updatedTieBreak !== 0) {
+      return updatedTieBreak;
+    }
+
+    const titleTieBreak = this.compareSortValues(left.title, right.title, SortDirection.ASC);
+    if (titleTieBreak !== 0) {
+      return titleTieBreak;
+    }
+
+    return left.id - right.id;
+  }
+
+  private readSortValue(card: CardListItemDto, sortBy: CardSortBy): string | number | boolean | Date | null {
+    switch (sortBy) {
+      case CardSortBy.TITLE:
+        return card.title;
+      case CardSortBy.PLAYER:
+        return card.definition.player;
+      case CardSortBy.BRAND:
+        return card.definition.cardSet?.brand ?? null;
+      case CardSortBy.SET_NAME:
+        return card.definition.cardSet?.setName ?? card.definition.legacySetText;
+      case CardSortBy.YEAR_MANUFACTURED:
+        return card.definition.cardSet?.yearManufactured ?? null;
+      case CardSortBy.SEASON:
+        return card.definition.cardSet?.season ?? null;
+      case CardSortBy.CARD_NUMBER:
+        return card.definition.cardNumber;
+      case CardSortBy.SPORT:
+        return card.definition.cardSet?.sport ?? null;
+      case CardSortBy.CATEGORY:
+        return card.definition.category;
+      case CardSortBy.SUBCATEGORY:
+        return card.definition.subcategory;
+      case CardSortBy.CARD_TYPE:
+        return card.definition.cardType;
+      case CardSortBy.COLLECTION_STATUS:
+        return card.collectionStatus;
+      case CardSortBy.CONDITION:
+        return card.record.condition;
+      case CardSortBy.GRADE_ESTIMATE:
+        return card.record.gradeEstimate;
+      case CardSortBy.IS_AUTOGRAPHED:
+        return card.record.isAutographed;
+      case CardSortBy.IS_FOR_TRADE:
+        return card.record.isForTrade;
+      case CardSortBy.IS_FOR_SALE:
+        return card.record.isForSale;
+      case CardSortBy.ASKING_PRICE_CENTS:
+        return card.record.askingPriceCents;
+      case CardSortBy.PRIORITY:
+        return card.record.priority;
+      case CardSortBy.CONFIDENCE:
+        return card.record.confidence;
+      case CardSortBy.CREATED_AT:
+        return card.record.createdAt;
+      case CardSortBy.UPDATED_AT:
+        return card.record.updatedAt;
+      default:
+        return card.record.updatedAt;
+    }
+  }
+
+  private compareSortValues(
+    left: string | number | boolean | Date | null,
+    right: string | number | boolean | Date | null,
+    direction: SortDirection,
+  ) {
+    const leftEmpty =
+      left === null || left === undefined || (typeof left === 'string' && !left.trim());
+    const rightEmpty =
+      right === null || right === undefined || (typeof right === 'string' && !right.trim());
+
+    if (leftEmpty && rightEmpty) {
+      return 0;
+    }
+
+    if (leftEmpty) {
+      return 1;
+    }
+
+    if (rightEmpty) {
+      return -1;
+    }
+
+    let compared = 0;
+
+    if (left instanceof Date && right instanceof Date) {
+      compared = left.getTime() - right.getTime();
+    } else if (typeof left === 'boolean' && typeof right === 'boolean') {
+      compared = Number(left) - Number(right);
+    } else if (typeof left === 'number' && typeof right === 'number') {
+      compared = left - right;
+    } else {
+      compared = String(left).localeCompare(String(right), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      });
+    }
+
+    if (compared === 0) {
+      return 0;
+    }
+
+    return direction === SortDirection.ASC ? compared : -compared;
   }
 
   private async syncCardRecordSequence(

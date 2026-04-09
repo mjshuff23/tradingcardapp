@@ -12,6 +12,77 @@ import {
 } from 'class-validator';
 import { CollectionStatus } from '../../prisma/client';
 
+export class ConfirmScanEnrichmentSourceDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  provider?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  query?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  url?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  snippet?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  score?: number | null;
+}
+
+export class ConfirmScanEnrichmentDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  provider?: string;
+
+  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  @IsOptional()
+  fields?: Record<string, unknown>;
+
+  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  @IsOptional()
+  fieldConfidence?: Record<string, number>;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  queries?: string[];
+
+  @ApiPropertyOptional({ type: [ConfirmScanEnrichmentSourceDto] })
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => ConfirmScanEnrichmentSourceDto)
+  sources?: ConfirmScanEnrichmentSourceDto[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  confidence?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  usedAi?: boolean;
+
+  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  @IsOptional()
+  debug?: Record<string, unknown> | null;
+}
+
 export class ConfirmScanDraftDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -164,4 +235,13 @@ export class ConfirmScanDto {
   @ValidateNested()
   @Type(() => ConfirmScanDraftDto)
   draft?: ConfirmScanDraftDto;
+
+  @ApiPropertyOptional({
+    description: 'Accepted web enrichment provenance persisted on the saved card definition',
+    type: ConfirmScanEnrichmentDto,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ConfirmScanEnrichmentDto)
+  enrichment?: ConfirmScanEnrichmentDto;
 }

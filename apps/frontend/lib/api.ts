@@ -2,6 +2,30 @@ export type ScanStatus = 'QUEUED' | 'PROCESSING' | 'NEEDS_REVIEW' | 'CONFIRMED' 
 export type CollectionStatus = 'OWNED' | 'WANTED';
 export type CardQueryMode = 'text' | 'nl';
 export type CardImageSource = 'USER' | 'CANONICAL' | 'LEGACY' | 'NONE';
+export type SortDirection = 'asc' | 'desc';
+export type CardSortBy =
+  | 'title'
+  | 'player'
+  | 'brand'
+  | 'setName'
+  | 'yearManufactured'
+  | 'season'
+  | 'cardNumber'
+  | 'sport'
+  | 'category'
+  | 'subcategory'
+  | 'cardType'
+  | 'collectionStatus'
+  | 'condition'
+  | 'gradeEstimate'
+  | 'isAutographed'
+  | 'isForTrade'
+  | 'isForSale'
+  | 'askingPriceCents'
+  | 'priority'
+  | 'confidence'
+  | 'createdAt'
+  | 'updatedAt';
 
 export type AuthUser = {
   id: string;
@@ -169,6 +193,43 @@ export type NormalizeTitleResult = {
     priority: number;
   }>;
   changedFields: string[];
+  debug?: Record<string, unknown> | null;
+};
+
+export type EnrichedScanCandidateFields = Partial<{
+  name: string | null;
+  set: string | null;
+  setName: string | null;
+  brand: string | null;
+  year: number | null;
+  player: string | null;
+  variant: string | null;
+  sport: string | null;
+  cardNumber: string | null;
+  season: string | null;
+  category: string | null;
+  subcategory: string | null;
+  hasAutographVariant: boolean | null;
+  isVintage: boolean | null;
+}>;
+
+export type EnrichedScanCandidateSource = {
+  provider: string;
+  query: string;
+  url: string;
+  title: string;
+  snippet: string | null;
+  score: number;
+};
+
+export type EnrichScanCandidateResult = {
+  fields: EnrichedScanCandidateFields;
+  fieldConfidence: Record<string, number>;
+  confidence: number;
+  usedAi: boolean;
+  provider: string;
+  queries: string[];
+  sources: EnrichedScanCandidateSource[];
   debug?: Record<string, unknown> | null;
 };
 
@@ -388,6 +449,7 @@ export async function confirmScan(
       askingPriceCents: number | null;
       priority: number | null;
     }>;
+    enrichment?: Partial<EnrichScanCandidateResult>;
   },
 ): Promise<{ id: number }> {
   return request<{ id: number }>(`/scans/${scanId}/confirm`, {
@@ -420,6 +482,8 @@ export async function listCards(params: {
   q?: string;
   collectionStatus?: CollectionStatus | 'ALL';
   queryMode?: CardQueryMode;
+  sortBy?: CardSortBy;
+  sortDirection?: SortDirection;
 }) {
   const searchParams = new URLSearchParams();
 
@@ -433,6 +497,14 @@ export async function listCards(params: {
 
   if (params.queryMode) {
     searchParams.set('queryMode', params.queryMode);
+  }
+
+  if (params.sortBy) {
+    searchParams.set('sortBy', params.sortBy);
+  }
+
+  if (params.sortDirection) {
+    searchParams.set('sortDirection', params.sortDirection);
   }
 
   const suffix = searchParams.toString();
@@ -450,6 +522,22 @@ export async function listCards(params: {
     ...response,
     items: response.items.map(normalizeCard),
   };
+}
+
+export async function enrichScanCandidate(
+  scanId: number,
+  candidateId: number,
+  payload?: {
+    draft?: EnrichedScanCandidateFields;
+  },
+): Promise<EnrichScanCandidateResult> {
+  return request<EnrichScanCandidateResult>(`/scans/${scanId}/candidates/${candidateId}/enrich`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload ?? {}),
+  });
 }
 
 export async function importCardsCsv(file: File): Promise<{

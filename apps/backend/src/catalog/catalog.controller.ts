@@ -36,7 +36,11 @@ import { SessionGuard } from '../auth/session.guard';
 import { User } from '../prisma/client';
 import { CatalogService } from './catalog.service';
 import { CardDetailDto, CatalogListResponseDto } from './dto/card-response.dto';
-import { ListCardsQueryDto } from './dto/list-cards-query.dto';
+import {
+  CardSortBy,
+  ListCardsQueryDto,
+  SortDirection,
+} from './dto/list-cards-query.dto';
 import {
   NormalizeTitleRequestDto,
   NormalizeTitleResultDto,
@@ -83,6 +87,8 @@ export class CatalogController {
       collectionStatus: query.collectionStatus,
       page: query.page,
       pageSize: query.pageSize,
+      sortBy: query.sortBy ?? CardSortBy.UPDATED_AT,
+      sortDirection: query.sortDirection ?? SortDirection.DESC,
     });
   }
 
