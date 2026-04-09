@@ -42,7 +42,7 @@ function main() {
   // SQL was never executed — `migrate deploy` exits 0 in that case, so `db
   // push` is the only way to bring the schema up to date. It is idempotent and
   // safe to run even when the schema is already in sync.
-  runPrisma(['db', 'push', '--skip-generate']);
+  runPrisma(['db', 'push']);
 
   runPrisma(['db', 'seed']);
 }
