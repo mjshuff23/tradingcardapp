@@ -28,7 +28,7 @@ async function main() {
     return;
   }
 
-  await seedUsers(catalog.users ?? []);
+  await seedUsersOrSkip(catalog.users ?? []);
   await seedCardSets(catalog.cardSets ?? []);
   await seedCardDefinitions(catalog.cardDefinitions ?? []);
   await seedUserCards(catalog.userCards ?? []);
@@ -38,6 +38,26 @@ async function main() {
   console.log(
     `Seed complete. ${catalog.cardSets?.length ?? 0} sets, ${catalog.cardDefinitions?.length ?? 0} definitions, ${catalog.userCards?.length ?? 0} owned rows, ${catalog.userWishlists?.length ?? 0} wishlist rows.`,
   );
+}
+
+async function seedUsersOrSkip(users) {
+  try {
+    await seedUsers(users);
+  } catch (error) {
+    // P2022 = column not found; the User table schema is out of sync with the
+    // Prisma schema (e.g. the initial migration only created `id` and `name`).
+    // Log a warning and continue so the rest of the seed can run and the app
+    // can start — migrations will bring the schema up to date.
+    if (error?.code === 'P2022') {
+      console.warn(
+        'Warning: seedUsers() skipped — User table schema is out of sync ' +
+          `(${error.code}: ${error.message}). ` +
+          'Run pending migrations to fix the User table, then re-seed.',
+      );
+      return;
+    }
+    throw error;
+  }
 }
 
 async function seedUsers(users) {
