@@ -1,4 +1,5 @@
 const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
 const path = require('node:path');
 
 const packageRoot = path.resolve(__dirname, '..');
@@ -9,13 +10,28 @@ function main() {
   if (migrateResult.status !== 0) {
     if (migrateResult.stderr.includes('P3005')) {
       // The database schema is not empty and hasn't been baselined.
-      // Mark all migrations as rolled back so Prisma can re-apply them cleanly.
+      // Mark every migration as already applied so Prisma won't try to re-run
+      // SQL that is already present in the production database.
       console.log(
         'Detected P3005: database schema not empty. Baselining existing schema...',
       );
-      runPrisma(['migrate', 'resolve', '--rolled-back', '--preview-feature'], {
-        allowFailure: true,
-      });
+
+      const migrationsDir = path.join(__dirname, 'migrations');
+      const entries = fs.readdirSync(migrationsDir, { withFileTypes: true });
+      const migrationNames = entries
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name)
+        .sort();
+
+      for (const migrationName of migrationNames) {
+        console.log(`Marking migration as applied: ${migrationName}`);
+        runPrisma(['migrate', 'resolve', '--applied', migrationName], {
+          allowFailure: true,
+        });
+      }
+
+      // All migrations are now baselined — deploy should be a no-op or apply
+      // any genuinely new migrations that weren't in the baseline set.
       runPrisma(['migrate', 'deploy']);
     } else {
       process.exit(migrateResult.status ?? 1);
