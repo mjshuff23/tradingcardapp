@@ -4,7 +4,24 @@ const path = require('node:path');
 const packageRoot = path.resolve(__dirname, '..');
 
 function main() {
-  runPrisma(['migrate', 'deploy']);
+  const migrateResult = runPrisma(['migrate', 'deploy'], { allowFailure: true });
+
+  if (migrateResult.status !== 0) {
+    if (migrateResult.stderr.includes('P3005')) {
+      // The database schema is not empty and hasn't been baselined.
+      // Mark all migrations as rolled back so Prisma can re-apply them cleanly.
+      console.log(
+        'Detected P3005: database schema not empty. Baselining existing schema...',
+      );
+      runPrisma(['migrate', 'resolve', '--rolled-back', '--preview-feature'], {
+        allowFailure: true,
+      });
+      runPrisma(['migrate', 'deploy']);
+    } else {
+      process.exit(migrateResult.status ?? 1);
+    }
+  }
+
   runPrisma(['db', 'seed']);
 }
 
