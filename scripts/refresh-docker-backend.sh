@@ -4,8 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(basename "$ROOT_DIR")}"
 BACKEND_VOLUME="${PROJECT_NAME}_backend_node_modules"
-USER_ID="${LOCAL_UID:-$(id -u)}"
-GROUP_ID="${LOCAL_GID:-$(id -g)}"
 
 cd "$ROOT_DIR"
 
@@ -26,15 +24,8 @@ docker compose build backend
 echo "Creating backend dependency volume..."
 docker volume create "$BACKEND_VOLUME" >/dev/null
 
-echo "Fixing backend dependency volume ownership to ${USER_ID}:${GROUP_ID}..."
-docker run --rm \
-  --user 0:0 \
-  -v "${BACKEND_VOLUME}:/vol" \
-  alpine:3.20 \
-  sh -lc "chown -R ${USER_ID}:${GROUP_ID} /vol"
-
-echo "Reinstalling backend workspace dependencies inside Docker..."
-docker compose run --rm --no-deps backend npm install -w apps/backend
+echo "Reinstalling backend workspace dependencies inside Docker as root..."
+docker compose run --rm --no-deps --user 0:0 backend npm install -w apps/backend
 
 echo "Starting backend service with fresh dependencies..."
 docker compose up -d backend

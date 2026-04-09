@@ -45,3 +45,4 @@ apps/backend/src/generated/
 # IDE
 .vscode/
 .idea/
+.openmcp/
