@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ImageAnnotatorClient, protos } from '@google-cloud/vision';
 import { StructuredCardHints } from '../common/card-hints.util';
@@ -18,11 +18,15 @@ export type LookupResult = {
 };
 
 @Injectable()
-export class LookupService {
+export class LookupService implements OnModuleInit {
   private readonly logger = new Logger(LookupService.name);
   private visionClient: ImageAnnotatorClient | null = null;
 
   constructor(private readonly configService: ConfigService) {}
+
+  onModuleInit() {
+    this.logger.log(`Active lookup providers: ${this.getProviders().join(', ') || 'none'}`);
+  }
 
   async lookup(input: LookupInput): Promise<LookupResult> {
     const providers = this.getProviders();
@@ -65,11 +69,21 @@ export class LookupService {
 
   private getProviders(): string[] {
     const configured = this.configService.get<string>('LOOKUP_PROVIDERS') ?? 'duckduckgo';
-    return configured
+    const providers = new Set(
+      configured
       .split(',')
       .map((value) => value.trim().toLowerCase())
       .filter(Boolean)
-      .filter((value) => ['google_vision', 'duckduckgo'].includes(value));
+      .filter((value) => ['google_vision', 'duckduckgo'].includes(value)),
+    );
+
+    providers.add('duckduckgo');
+
+    if (this.hasGoogleCredentials()) {
+      providers.add('google_vision');
+    }
+
+    return [...providers];
   }
 
   private async lookupWithGoogleVision(input: LookupInput): Promise<LookupResult> {
@@ -181,12 +195,20 @@ export class LookupService {
   private buildQuery(input: LookupInput): string {
     const fromHints: string[] = [];
 
+    if (input.hints.seasons.length) {
+      fromHints.push(input.hints.seasons[0]);
+    }
+
     if (input.hints.years.length) {
       fromHints.push(String(input.hints.years[0]));
     }
 
     if (input.hints.brands.length) {
       fromHints.push(input.hints.brands[0]);
+    }
+
+    if (input.hints.subsets.length) {
+      fromHints.push(input.hints.subsets[0]);
     }
 
     if (input.hints.cardNumbers.length) {

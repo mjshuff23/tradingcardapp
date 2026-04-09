@@ -20,6 +20,7 @@ import {
   TitleNormalizationResult,
   TitleNormalizationService,
 } from './title-normalization.service';
+import { getTaxonomyForResponse } from './card-taxonomy';
 
 const userCardInclude = {
   cardDefinition: {
@@ -123,6 +124,10 @@ export class CatalogService {
     return this.titleNormalizationService.normalize(rawTitle, fields);
   }
 
+  getTaxonomy() {
+    return getTaxonomyForResponse();
+  }
+
   async updateCard(cardId: number, userId: string, dto: UpdateCardDto): Promise<CardDetailDto> {
     const current = await this.findCardSource(userId, cardId);
     if (!current) {
@@ -159,8 +164,6 @@ export class CatalogService {
             thumbnailImageKey: current.row.thumbnailImageKey,
             frontImageKey: current.row.frontImageKey,
             backImageKey: current.row.backImageKey,
-            gradeEstimate:
-              dto.gradeEstimate !== undefined ? dto.gradeEstimate : current.row.gradeEstimate,
             confidence: current.row.confidence,
             scanJobId: current.row.scanJobId,
             createdAt: current.row.createdAt,
@@ -241,8 +244,6 @@ export class CatalogService {
             notes: dto.notes !== undefined ? dto.notes : current.row.notes,
             frontImageKey: current.row.frontImageKey,
             backImageKey: current.row.backImageKey,
-            gradeEstimate:
-              dto.gradeEstimate !== undefined ? dto.gradeEstimate : current.row.gradeEstimate,
           },
         });
       }

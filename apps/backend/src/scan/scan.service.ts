@@ -17,13 +17,19 @@ import { OcrService } from '../ocr/ocr.service';
 import { StorageService } from '../storage/storage.service';
 import { ValidationService } from '../validation/validation.service';
 import { CatalogIndexService } from '../catalog/catalog-index.service';
+import { TitleNormalizationService } from '../catalog/title-normalization.service';
 import { ConfirmScanDto } from './dto/confirm-scan.dto';
 import { LinkPreviewService } from './link-preview.service';
 
 type CandidateReference = {
   name: string;
   set: string | null;
+  setName: string | null;
+  legacySetText: string | null;
+  brand: string | null;
   year: number | null;
+  season: string | null;
+  cardNumber: string | null;
   player: string | null;
   variant: string | null;
   sport: string | null;
@@ -104,6 +110,7 @@ export class ScanService {
     private readonly lookupService: LookupService,
     private readonly linkPreviewService: LinkPreviewService,
     private readonly catalogIndexService: CatalogIndexService,
+    private readonly titleNormalizationService: TitleNormalizationService,
   ) {}
 
   async createScan(params: { userId: string; frontFile?: UploadedFile; backFile?: UploadedFile }) {
@@ -286,16 +293,16 @@ export class ScanService {
 
     const merged = {
       name: dto.draft?.name ?? selectedCandidate.name,
-      set: dto.draft?.set ?? selectedCandidate.set,
-      setName: dto.draft?.setName ?? selectedCandidate.set,
-      brand: dto.draft?.brand ?? null,
+      set: dto.draft?.set ?? selectedCandidate.legacySetText ?? selectedCandidate.set,
+      setName: dto.draft?.setName ?? selectedCandidate.setName ?? selectedCandidate.set,
+      brand: dto.draft?.brand ?? selectedCandidate.brand ?? null,
       year: dto.draft?.year ?? selectedCandidate.year,
       yearManufactured: dto.draft?.year ?? selectedCandidate.year,
       player: dto.draft?.player ?? selectedCandidate.player,
       variant: dto.draft?.variant ?? selectedCandidate.variant,
       sport: dto.draft?.sport ?? selectedCandidate.sport,
-      season: dto.draft?.season ?? null,
-      cardNumber: dto.draft?.cardNumber ?? null,
+      season: dto.draft?.season ?? selectedCandidate.season ?? null,
+      cardNumber: dto.draft?.cardNumber ?? selectedCandidate.cardNumber ?? null,
       category: dto.draft?.category ?? null,
       subcategory: dto.draft?.subcategory ?? null,
       hasAutographVariant: dto.draft?.hasAutographVariant ?? false,
@@ -345,7 +352,6 @@ export class ScanService {
               frontImageKey: frontImageUrl,
               backImageKey,
               notes: dto.draft?.notes ?? undefined,
-              gradeEstimate: dto.draft?.gradeEstimate ?? undefined,
               priority: dto.draft?.priority ?? undefined,
               confidence,
               scanJobId: scanJob.id,
@@ -359,7 +365,6 @@ export class ScanService {
               frontImageKey: frontImageUrl,
               backImageKey,
               notes: dto.draft?.notes ?? null,
-              gradeEstimate: dto.draft?.gradeEstimate ?? null,
               priority: dto.draft?.priority ?? null,
               confidence,
               scanJobId: scanJob.id,
@@ -457,7 +462,12 @@ export class ScanService {
               scanJobId: scanId,
               name: candidate.name,
               set: candidate.set,
+              setName: candidate.setName,
+              legacySetText: candidate.legacySetText,
+              brand: candidate.brand,
               year: candidate.year,
+              season: candidate.season,
+              cardNumber: candidate.cardNumber,
               player: candidate.player,
               variant: candidate.variant,
               sport: candidate.sport,
@@ -501,6 +511,9 @@ export class ScanService {
       const number = this.extractReferenceNumber({
         name: definition.name,
         set: definition.cardSet?.setName ?? definition.legacySetText,
+        setName: definition.cardSet?.setName ?? null,
+        legacySetText: definition.legacySetText ?? null,
+        cardNumber: definition.cardNumber ?? null,
         variant: definition.variant,
         metadata: null,
       });
@@ -508,7 +521,12 @@ export class ScanService {
       return {
         name: definition.name,
         set: definition.cardSet?.setName ?? definition.legacySetText,
+        setName: definition.cardSet?.setName ?? null,
+        legacySetText: definition.legacySetText,
+        brand: definition.cardSet?.brand ?? null,
         year: definition.cardSet?.yearManufactured ?? null,
+        season: definition.cardSet?.season ?? null,
+        cardNumber: definition.cardNumber ?? number,
         player: definition.player,
         variant: definition.variant,
         sport: definition.cardSet?.sport ?? null,
@@ -568,6 +586,11 @@ export class ScanService {
           score: 0.15,
           validationScore: fallbackValidation.validationScore,
           sourceHints: fallbackValidation.sourceHints,
+          setName: null,
+          legacySetText: null,
+          brand: null,
+          season: null,
+          cardNumber: null,
         },
       ];
     }
@@ -576,9 +599,14 @@ export class ScanService {
       .map((reference) => {
         const searchable = [
           reference.year,
+          reference.season,
+          reference.brand,
+          reference.setName,
+          reference.legacySetText,
           reference.player,
           reference.name,
           reference.set,
+          reference.cardNumber ? `#${reference.cardNumber}` : null,
           reference.variant,
           reference.sport,
         ]
@@ -707,12 +735,16 @@ export class ScanService {
   }
 
   private computeSetBonus(
-    reference: { set: string | null; source: string },
+    reference: Pick<CandidateReference, 'set' | 'setName' | 'legacySetText' | 'brand' | 'source'>,
     ocrText: string,
     backText: string,
     setHints: string[],
   ): number {
-    const setNormalized = normalizeText(reference.set);
+    const setNormalized = normalizeText(
+      [reference.brand, reference.setName, reference.legacySetText, reference.set]
+        .filter(Boolean)
+        .join(' '),
+    );
     const sourceNormalized = normalizeText(reference.source);
     const full = normalizeText(ocrText);
     const back = normalizeText(backText);
@@ -736,7 +768,7 @@ export class ScanService {
       return 0;
     }
 
-    const referenceNumber = this.extractReferenceNumber(reference);
+    const referenceNumber = normalizeText(reference.cardNumber) || this.extractReferenceNumber(reference);
     if (!referenceNumber) {
       return 0;
     }
@@ -890,11 +922,18 @@ export class ScanService {
     const normalizedTitle = normalizeText(title);
     const yearMatch = normalizedTitle.match(/\b(19\d{2}|20\d{2})\b/);
     const year = yearMatch ? Number(yearMatch[1]) : null;
-
-    const set = this.extractLookupSet(segments, normalizedTitle);
-    const variant = this.extractLookupVariant(segments);
-    const player = lockedPlayer ? this.titleCase(lockedPlayer) : null;
-    const name = this.extractLookupName(segments, lockedPlayer);
+    const normalized = this.titleNormalizationService.parseDeterministic(title, {
+      player: lockedPlayer ? this.titleCase(lockedPlayer) : null,
+      yearManufactured: year,
+    });
+    const setName = normalized.fields.setName ?? this.extractLookupSet(segments, normalizedTitle);
+    const brand = normalized.fields.brand ?? null;
+    const season = normalized.fields.season ?? null;
+    const cardNumber = normalized.fields.cardNumber ?? this.extractCardNumberFromText(title);
+    const variant = normalized.fields.variant ?? this.extractLookupVariant(segments);
+    const player =
+      normalized.fields.player ?? (lockedPlayer ? this.titleCase(lockedPlayer) : null);
+    const name = this.extractLookupName(segments, lockedPlayer, title, normalized.fields.name ?? null);
 
     if (!name) {
       return null;
@@ -902,11 +941,16 @@ export class ScanService {
 
     return {
       name,
-      set,
+      set: setName,
+      setName,
+      legacySetText: setName,
+      brand,
       year,
+      season,
+      cardNumber,
       player,
       variant,
-      sport: this.extractLookupSport(normalizedTitle),
+      sport: normalized.fields.sport ?? this.extractLookupSport(normalizedTitle),
     };
   }
 
@@ -954,7 +998,16 @@ export class ScanService {
     return variant || null;
   }
 
-  private extractLookupName(segments: string[], lockedPlayer: string | null): string | null {
+  private extractLookupName(
+    segments: string[],
+    lockedPlayer: string | null,
+    rawTitle: string,
+    normalizedName: string | null,
+  ): string | null {
+    if (normalizedName && !/^[a-z]?\d{2,8}[a-z]?$/i.test(normalizedName)) {
+      return normalizedName;
+    }
+
     if (lockedPlayer) {
       const playerIndex = segments.findIndex(
         (segment) => normalizeText(segment) === lockedPlayer,
@@ -976,6 +1029,7 @@ export class ScanService {
       const normalized = normalizeText(cleaned);
       if (
         normalized.length < 3 ||
+        /^[a-z]?\d{2,8}[a-z]?$/.test(normalized) ||
         /\b(19\d{2}|20\d{2})\b/.test(normalized) ||
         normalized.includes('comc') ||
         normalized.includes('ebay') ||
@@ -987,7 +1041,17 @@ export class ScanService {
       return cleaned;
     }
 
-    return null;
+    if (lockedPlayer) {
+      return this.titleCase(lockedPlayer);
+    }
+
+    const fallback = rawTitle
+      .replace(/#\s*[a-z]?\d{1,6}[a-z]?/gi, ' ')
+      .replace(/\b(19\d{2}|20\d{2})(?:\s*[-/]\s*(?:\d{2}|19\d{2}|20\d{2}))?\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return fallback || null;
   }
 
   private cleanLookupNameSegment(value: string): string | null {
@@ -1029,7 +1093,7 @@ export class ScanService {
     for (const reference of references) {
       const key = buildCardKey({
         name: reference.name,
-        set: reference.set,
+        set: reference.setName ?? reference.legacySetText ?? reference.set,
         year: reference.year,
         player: reference.player,
         variant: reference.variant,
@@ -1110,7 +1174,11 @@ export class ScanService {
 
   private countReferenceSignals(reference: CandidateReference): number {
     const normalized = normalizeText(this.referenceText(reference));
-    const setText = normalizeText(reference.set);
+    const setText = normalizeText(
+      [reference.brand, reference.setName, reference.legacySetText, reference.set]
+        .filter(Boolean)
+        .join(' '),
+    );
     const hasBrandSignal = CARD_BRAND_KEYWORDS.some((keyword) => normalized.includes(keyword));
     const hasSubsetSignal = CARD_SUBSET_KEYWORDS.some((keyword) => normalized.includes(keyword));
     const hasSetSignal =
@@ -1157,8 +1225,15 @@ export class ScanService {
   }
 
   private extractReferenceNumber(
-    reference: Pick<CandidateReference, 'name' | 'set' | 'variant' | 'metadata'>,
+    reference: Pick<
+      CandidateReference,
+      'name' | 'set' | 'setName' | 'legacySetText' | 'cardNumber' | 'variant' | 'metadata'
+    >,
   ): string | null {
+    if (reference.cardNumber) {
+      return reference.cardNumber.trim().toUpperCase();
+    }
+
     if (reference.metadata && typeof reference.metadata === 'object' && !Array.isArray(reference.metadata)) {
       const metadataNumber = (reference.metadata as Record<string, unknown>).number;
       if (typeof metadataNumber === 'string' && metadataNumber.trim()) {
@@ -1166,7 +1241,11 @@ export class ScanService {
       }
     }
 
-    return this.extractCardNumberFromText([reference.name, reference.set, reference.variant].filter(Boolean).join(' '));
+    return this.extractCardNumberFromText(
+      [reference.name, reference.set, reference.setName, reference.legacySetText, reference.variant]
+        .filter(Boolean)
+        .join(' '),
+    );
   }
 
   private extractCardNumberFromText(value: string | null | undefined): string | null {
@@ -1186,7 +1265,17 @@ export class ScanService {
   }
 
   private referenceText(reference: CandidateReference): string {
-    return [reference.name, reference.set, reference.variant].filter(Boolean).join(' ');
+    return [
+      reference.name,
+      reference.brand,
+      reference.setName,
+      reference.legacySetText,
+      reference.set,
+      reference.cardNumber ? `#${reference.cardNumber}` : null,
+      reference.variant,
+    ]
+      .filter(Boolean)
+      .join(' ');
   }
 
   private hasNoiseTerms(value: string, terms: string[]): boolean {

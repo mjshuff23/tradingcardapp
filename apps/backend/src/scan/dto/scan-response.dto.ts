@@ -32,7 +32,22 @@ export class ScanCandidateDto {
   set!: string | null;
 
   @ApiProperty({ nullable: true })
+  setName!: string | null;
+
+  @ApiProperty({ nullable: true })
+  legacySetText!: string | null;
+
+  @ApiProperty({ nullable: true })
+  brand!: string | null;
+
+  @ApiProperty({ nullable: true })
   year!: number | null;
+
+  @ApiProperty({ nullable: true })
+  season!: string | null;
+
+  @ApiProperty({ nullable: true })
+  cardNumber!: string | null;
 
   @ApiProperty({ nullable: true })
   player!: string | null;

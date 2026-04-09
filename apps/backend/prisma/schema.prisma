@@ -195,7 +195,12 @@ model ScanCandidate {
   scanJobId       Int
   name            String
   set             String?
+  setName         String?
+  legacySetText   String?
+  brand           String?
   year            Int?
+  season          String?
+  cardNumber      String?
   player          String?
   variant         String?
   sport           String?

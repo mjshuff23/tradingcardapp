@@ -42,7 +42,7 @@ function unique<T>(items: T[]): T[] {
 }
 
 export function parseStructuredCardHints(frontText: string, backText?: string): StructuredCardHints {
-  const primaryText = backText && backText.trim().length > 0 ? backText : `${frontText} ${backText ?? ''}`;
+  const primaryText = [frontText, backText].filter(Boolean).join(' ');
   const normalized = normalizeText(primaryText);
   const lowered = primaryText.toLowerCase();
 

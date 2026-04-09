@@ -8,12 +8,15 @@ import dotenv from 'dotenv';
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
+const targetDatabaseUrl = process.env.TARGET_DATABASE_URL ?? process.env.DATABASE_URL ?? '';
+const catalogOutputPath = process.env.CATALOG_EXPORT_PATH
+  ? path.resolve(process.cwd(), process.env.CATALOG_EXPORT_PATH)
+  : path.join(__dirname, 'seed-data', 'catalog.json');
 const prisma = new PrismaClient({
   adapter: new PrismaPg({
-    connectionString: process.env.DATABASE_URL ?? '',
+    connectionString: targetDatabaseUrl,
   }),
 });
-const catalogOutputPath = path.join(__dirname, 'seed-data', 'catalog.json');
 
 const DEFAULT_LOCAL_USER = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -43,6 +46,10 @@ const BRAND_KEYWORDS = [
 ];
 
 async function main() {
+  if (!targetDatabaseUrl) {
+    throw new Error('TARGET_DATABASE_URL or DATABASE_URL is required.');
+  }
+
   const cardTableExists = await prisma.$queryRawUnsafe(
     `SELECT to_regclass('"Card"') IS NOT NULL AS "exists"`,
   );

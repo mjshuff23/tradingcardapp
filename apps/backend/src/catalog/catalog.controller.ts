@@ -41,6 +41,7 @@ import {
   NormalizeTitleRequestDto,
   NormalizeTitleResultDto,
 } from './dto/normalize-title.dto';
+import { CardTaxonomyResponseDto } from './dto/taxonomy.dto';
 import { UpdateCardDto } from './dto/update-card.dto';
 
 @ApiTags('Cards')
@@ -58,6 +59,14 @@ export class CatalogController {
   @ApiBadRequestResponse({ description: 'Invalid normalization payload.' })
   async normalizeTitle(@Body() body: NormalizeTitleRequestDto) {
     return this.catalogService.normalizeTitle(body.rawTitle, body.fields ?? {});
+  }
+
+  @UseGuards(SessionGuard)
+  @Get('taxonomy')
+  @ApiOperation({ summary: 'Get the controlled card taxonomy used for category and subcategory inputs' })
+  @ApiOkResponse({ type: CardTaxonomyResponseDto })
+  getTaxonomy() {
+    return this.catalogService.getTaxonomy();
   }
 
   @UseGuards(SessionGuard)

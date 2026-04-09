@@ -113,6 +113,13 @@ textarea {
     transform 160ms ease;
 }
 
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+}
+
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
@@ -688,9 +695,89 @@ img {
   background: rgba(255, 255, 255, 0.88);
 }
 
+.themed-select {
+  position: relative;
+}
+
+.themed-select__trigger,
+.themed-select__option {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+
+[data-theme='light'] .themed-select__trigger,
+[data-theme='light'] .themed-select__option {
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.themed-select__trigger {
+  min-height: 50px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.themed-select__caret {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.themed-select__menu {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.45rem;
+  border-radius: 18px;
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-lg);
+}
+
+.themed-select__option {
+  min-height: 46px;
+  padding: 0.72rem 0.85rem;
+  display: grid;
+  gap: 0.18rem;
+  text-align: left;
+}
+
+.themed-select__option small {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.themed-select__option.is-selected,
+.themed-select__option:hover,
+.themed-select__option:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--accent-soft);
+}
+
+.themed-select.is-disabled .themed-select__trigger,
+.themed-select__option.is-disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
 .field textarea {
   min-height: 140px;
   resize: vertical;
+}
+
+.field input:disabled,
+.field textarea:disabled {
+  opacity: 0.62;
+  background: var(--surface-ghost);
 }
 
 .field--textarea {
@@ -870,6 +957,43 @@ img {
   gap: 1rem;
 }
 
+.review-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.38fr) minmax(0, 0.62fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.review-layout__sidebar {
+  position: sticky;
+  top: 104px;
+}
+
+.review-sidebar-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.review-layout__candidates {
+  display: grid;
+  gap: 1rem;
+}
+
+.review-candidate-list {
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.review-candidate-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.review-candidate-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--border-strong);
+}
+
 .candidate-card {
   display: grid;
   grid-template-columns: auto minmax(0, 132px) minmax(0, 1fr);
@@ -914,6 +1038,56 @@ img {
   margin: 0;
   font-family: var(--font-display);
   font-size: 1rem;
+}
+
+.preview-grid--stacked {
+  grid-template-columns: 1fr;
+}
+
+.candidate-detail-list {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--text-soft);
+  font-size: 0.92rem;
+}
+
+.candidate-detail-list strong {
+  color: var(--muted);
+}
+
+.review-ocr summary {
+  cursor: pointer;
+  color: var(--text-soft);
+  font-weight: 700;
+}
+
+.suggestion-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.suggestion-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.suggestion-item {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+}
+
+.suggestion-item strong {
+  color: var(--text);
+}
+
+.suggestion-arrow {
+  color: var(--muted);
 }
 
 .detail-grid-spaced {
@@ -1038,7 +1212,8 @@ img {
   }
 
   .detail-shell,
-  .hero {
+  .hero,
+  .review-layout {
     grid-template-columns: 1fr;
   }
 
@@ -1070,6 +1245,16 @@ img {
   .page-header {
     align-items: start;
     flex-direction: column;
+  }
+
+  .review-layout__sidebar {
+    position: static;
+  }
+
+  .review-candidate-list {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
   }
 
   .candidate-card {
@@ -1105,7 +1290,8 @@ img {
   }
 
   .candidate-card,
-  .toolbar--binder {
+  .toolbar--binder,
+  .suggestion-item {
     grid-template-columns: 1fr;
   }
 

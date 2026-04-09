@@ -9,6 +9,48 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { CollectionStatus } from '../../prisma/client';
+
+export class NormalizeTitleSearchDto {
+  @ApiPropertyOptional()
+  searchText?: string;
+
+  @ApiPropertyOptional({ enum: CollectionStatus })
+  collectionStatus?: CollectionStatus;
+
+  @ApiPropertyOptional()
+  year?: number;
+
+  @ApiPropertyOptional()
+  sport?: string;
+
+  @ApiPropertyOptional()
+  cardNumber?: string;
+
+  @ApiPropertyOptional()
+  brand?: string;
+
+  @ApiPropertyOptional()
+  setName?: string;
+
+  @ApiPropertyOptional()
+  season?: string;
+
+  @ApiPropertyOptional()
+  isForTrade?: boolean;
+
+  @ApiPropertyOptional()
+  isForSale?: boolean;
+
+  @ApiPropertyOptional()
+  isAutographed?: boolean;
+
+  @ApiPropertyOptional()
+  isVintage?: boolean;
+
+  @ApiPropertyOptional()
+  priority?: number;
+}
 
 export class NormalizeTitleFieldsDto {
   @ApiPropertyOptional()
@@ -112,6 +154,12 @@ export class NormalizeTitleResultDto {
 
   @ApiProperty()
   usedAi!: boolean;
+
+  @ApiProperty({ type: NormalizeTitleSearchDto })
+  search!: NormalizeTitleSearchDto;
+
+  @ApiProperty({ type: [String] })
+  changedFields!: string[];
 
   @ApiPropertyOptional({ type: 'object', additionalProperties: true, nullable: true })
   @IsOptional()

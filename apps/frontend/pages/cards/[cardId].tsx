@@ -6,12 +6,16 @@ import { AppShell } from '../../components/AppShell';
 import { CardImage } from '../../components/CardImage';
 import { PageHeader } from '../../components/PageHeader';
 import { StatusPill } from '../../components/StatusPill';
+import { SuggestionPreview } from '../../components/SuggestionPreview';
+import { ThemedSelect, ThemedSelectOption } from '../../components/ThemedSelect';
 import { useAuth } from '../../lib/auth-context';
 import {
   CardDetail,
+  CardTaxonomy,
   CollectionStatus,
   clearCardImage,
   getCard,
+  getCardTaxonomy,
   normalizeCardTitle,
   uploadCardImage,
   updateCard,
@@ -119,6 +123,102 @@ function joinFields(values: Array<string | number | null | undefined>) {
   return values.filter(Boolean).join(' · ');
 }
 
+const NORMALIZATION_FIELD_LABELS: Record<string, string> = {
+  name: 'Card name',
+  player: 'Player',
+  brand: 'Brand',
+  setName: 'Set name',
+  yearManufactured: 'Year',
+  season: 'Season',
+  cardNumber: 'Card number',
+  sport: 'Sport',
+  variant: 'Variant',
+  category: 'Category',
+  subcategory: 'Subcategory',
+  hasAutographVariant: 'Auto variant exists',
+  isVintage: 'Vintage flag',
+};
+
+function applyNormalizationToForm(form: FormState, normalized: Awaited<ReturnType<typeof normalizeCardTitle>>): FormState {
+  return {
+    ...form,
+    name: normalized.fields.name ?? form.name,
+    player: normalized.fields.player ?? form.player,
+    brand: normalized.fields.brand ?? form.brand,
+    setName: normalized.fields.setName ?? form.setName,
+    legacySetText: normalized.fields.setName ?? form.legacySetText,
+    season: normalized.fields.season ?? form.season,
+    cardNumber: normalized.fields.cardNumber ?? form.cardNumber,
+    yearManufactured:
+      normalized.fields.yearManufactured !== undefined &&
+      normalized.fields.yearManufactured !== null
+        ? String(normalized.fields.yearManufactured)
+        : form.yearManufactured,
+    variant: normalized.fields.variant ?? form.variant,
+    sport: normalized.fields.sport ?? form.sport,
+    category: normalized.fields.category ?? form.category,
+    subcategory: normalized.fields.subcategory ?? form.subcategory,
+    hasAutographVariant:
+      normalized.fields.hasAutographVariant ?? form.hasAutographVariant,
+    isVintage: normalized.fields.isVintage ?? form.isVintage,
+  };
+}
+
+function buildSuggestionItems(
+  form: FormState,
+  normalized: Awaited<ReturnType<typeof normalizeCardTitle>> | null,
+) {
+  if (!normalized) {
+    return [];
+  }
+
+  const currentValues: Record<string, string> = {
+    name: form.name || 'Empty',
+    player: form.player || 'Empty',
+    brand: form.brand || 'Empty',
+    setName: form.setName || 'Empty',
+    yearManufactured: form.yearManufactured || 'Empty',
+    season: form.season || 'Empty',
+    cardNumber: form.cardNumber || 'Empty',
+    sport: form.sport || 'Empty',
+    variant: form.variant || 'Empty',
+    category: form.category || 'Empty',
+    subcategory: form.subcategory || 'Empty',
+    hasAutographVariant: form.hasAutographVariant ? 'Yes' : 'No',
+    isVintage: form.isVintage ? 'Yes' : 'No',
+  };
+
+  return normalized.changedFields.map((field) => {
+    const suggestedValue = normalized.fields[field as keyof typeof normalized.fields];
+    return {
+      field: NORMALIZATION_FIELD_LABELS[field] ?? field,
+      previous: currentValues[field] ?? 'Empty',
+      next:
+        typeof suggestedValue === 'boolean'
+          ? suggestedValue
+            ? 'Yes'
+            : 'No'
+          : suggestedValue === null || suggestedValue === undefined || suggestedValue === ''
+            ? 'Empty'
+            : String(suggestedValue),
+    };
+  });
+}
+
+function toSelectOptions(values: string[], currentValue?: string | null): ThemedSelectOption[] {
+  const unique = Array.from(new Set([...values, currentValue ?? ''].filter(Boolean)));
+  return unique.map((value) => ({ value, label: value }));
+}
+
+function subcategoryOptions(taxonomy: CardTaxonomy | null, category: string | null | undefined) {
+  if (!taxonomy || !category) {
+    return [];
+  }
+
+  const group = taxonomy.groups.find((entry) => entry.category === category);
+  return group ? group.subcategories.map((subcategory) => subcategory.name) : [];
+}
+
 export default function CardDetailPage() {
   const router = useRouter();
   const { authenticated, loading: authLoading } = useAuth();
@@ -132,6 +232,10 @@ export default function CardDetailPage() {
 
   const [card, setCard] = useState<CardDetail | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
+  const [taxonomy, setTaxonomy] = useState<CardTaxonomy | null>(null);
+  const [pendingSuggestion, setPendingSuggestion] = useState<Awaited<
+    ReturnType<typeof normalizeCardTitle>
+  > | null>(null);
   const [busy, setBusy] = useState(false);
   const [cleanupBusy, setCleanupBusy] = useState(false);
   const [imageBusyKind, setImageBusyKind] = useState<'front' | 'back' | 'canonical' | null>(null);
@@ -151,12 +255,16 @@ export default function CardDetailPage() {
       setError(null);
 
       try {
-        const payload = await getCard(cardId);
+        const [payload, taxonomyPayload] = await Promise.all([
+          getCard(cardId),
+          getCardTaxonomy(),
+        ]);
         if (stopped) {
           return;
         }
         setCard(payload);
         setForm(toFormState(payload));
+        setTaxonomy(taxonomyPayload);
       } catch (loadError) {
         if (!stopped) {
           setError((loadError as Error).message);
@@ -207,19 +315,32 @@ export default function CardDetailPage() {
         hasAutographVariant: form.hasAutographVariant,
         isVintage: form.isVintage,
         collectionStatus: form.collectionStatus,
-        condition: form.condition.trim() || null,
-        isAutographed: form.isAutographed,
-        autographFormat: form.autographFormat.trim() || null,
-        isForTrade: form.isForTrade,
-        isForSale: form.isForSale,
-        askingPriceCents: parseOptionalNumber(form.askingPriceCents),
-        priority: parseOptionalNumber(form.priority),
+        condition:
+          form.collectionStatus === 'WANTED' ? null : form.condition.trim() || null,
+        isAutographed:
+          form.collectionStatus === 'WANTED' ? false : form.isAutographed,
+        autographFormat:
+          form.collectionStatus === 'WANTED' ? null : form.autographFormat.trim() || null,
+        isForTrade:
+          form.collectionStatus === 'WANTED' ? false : form.isForTrade,
+        isForSale:
+          form.collectionStatus === 'WANTED' ? false : form.isForSale,
+        askingPriceCents:
+          form.collectionStatus === 'WANTED'
+            ? null
+            : parseOptionalNumber(form.askingPriceCents),
+        priority:
+          form.collectionStatus === 'WANTED'
+            ? parseOptionalNumber(form.priority)
+            : null,
         notes: form.notes.trim() || null,
-        gradeEstimate: form.gradeEstimate.trim() || null,
+        gradeEstimate:
+          form.collectionStatus === 'WANTED' ? null : form.gradeEstimate.trim() || null,
       });
 
       setCard(updated);
       setForm(toFormState(updated));
+      setPendingSuggestion(null);
       setMessage('Card updated.');
     } catch (saveError) {
       setError((saveError as Error).message);
@@ -267,36 +388,13 @@ export default function CardDetailPage() {
         },
       });
 
-      setForm((current) =>
-        current
-          ? {
-              ...current,
-              name: normalized.fields.name ?? current.name,
-              player: normalized.fields.player ?? current.player,
-              brand: normalized.fields.brand ?? current.brand,
-              setName: normalized.fields.setName ?? current.setName,
-              legacySetText: normalized.fields.setName ?? current.legacySetText,
-              yearManufactured:
-                normalized.fields.yearManufactured !== undefined &&
-                normalized.fields.yearManufactured !== null
-                  ? String(normalized.fields.yearManufactured)
-                  : current.yearManufactured,
-              season: normalized.fields.season ?? current.season,
-              cardNumber: normalized.fields.cardNumber ?? current.cardNumber,
-              variant: normalized.fields.variant ?? current.variant,
-              sport: normalized.fields.sport ?? current.sport,
-              category: normalized.fields.category ?? current.category,
-              subcategory: normalized.fields.subcategory ?? current.subcategory,
-              hasAutographVariant:
-                normalized.fields.hasAutographVariant ?? current.hasAutographVariant,
-              isVintage: normalized.fields.isVintage ?? current.isVintage,
-            }
-          : current,
-      );
+      setPendingSuggestion(normalized);
       setMessage(
         normalized.usedAi
-          ? `AI cleanup applied at ${normalized.confidence.toFixed(3)} confidence.`
-          : `Cleanup suggestions applied at ${normalized.confidence.toFixed(3)} confidence.`,
+          ? `AI cleanup ready at ${normalized.confidence.toFixed(3)} confidence.`
+          : normalized.changedFields.length
+            ? `Cleanup suggestions ready at ${normalized.confidence.toFixed(3)} confidence.`
+            : 'No better suggestion found from the current title.',
       );
     } catch (cleanupError) {
       setError((cleanupError as Error).message);
@@ -346,6 +444,21 @@ export default function CardDetailPage() {
       setImageBusyKind(null);
     }
   };
+
+  const applyPendingSuggestion = () => {
+    if (!form || !pendingSuggestion) {
+      return;
+    }
+
+    setForm(applyNormalizationToForm(form, pendingSuggestion));
+    setPendingSuggestion(null);
+    setMessage('Suggested cleanup applied to the form.');
+  };
+
+  const isWanted = form?.collectionStatus === 'WANTED';
+  const categoryOptions = taxonomy?.groups.map((group) => group.category) ?? [];
+  const activeSubcategoryOptions = subcategoryOptions(taxonomy, form?.category);
+  const suggestionItems = form ? buildSuggestionItems(form, pendingSuggestion) : [];
 
   return (
     <AppShell>
@@ -514,6 +627,22 @@ export default function CardDetailPage() {
             </aside>
 
             <section className="stack">
+              {pendingSuggestion ? (
+                <SuggestionPreview
+                  title="Cleanup preview"
+                  subtitle={
+                    pendingSuggestion.usedAi
+                      ? `AI refinement suggested ${pendingSuggestion.changedFields.length} field change(s).`
+                      : `Parser pass suggested ${pendingSuggestion.changedFields.length} field change(s).`
+                  }
+                  items={suggestionItems}
+                  emptyMessage="No better suggestion found from the current title."
+                  applyLabel="Apply suggestions"
+                  onApply={applyPendingSuggestion}
+                  onDismiss={() => setPendingSuggestion(null)}
+                />
+              ) : null}
+
               {!authenticated ? (
                 <section className="surface gate-card">
                   <h2 className="surface-title">Viewing the demo card in read-only mode</h2>
@@ -670,21 +799,30 @@ export default function CardDetailPage() {
 
                     <div className="field">
                       <label htmlFor="category">Category</label>
-                      <input
-                        id="category"
+                      <ThemedSelect
                         value={form.category}
-                        onChange={(event) => setForm({ ...form, category: event.target.value })}
+                        onChange={(nextValue) =>
+                          setForm({
+                            ...form,
+                            category: nextValue,
+                            subcategory:
+                              nextValue === form.category ? form.subcategory : '',
+                          })
+                        }
                         disabled={!authenticated}
+                        placeholder="Select category"
+                        options={toSelectOptions(categoryOptions, form.category)}
                       />
                     </div>
 
                     <div className="field">
                       <label htmlFor="subcategory">Subcategory</label>
-                      <input
-                        id="subcategory"
+                      <ThemedSelect
                         value={form.subcategory}
-                        onChange={(event) => setForm({ ...form, subcategory: event.target.value })}
-                        disabled={!authenticated}
+                        onChange={(nextValue) => setForm({ ...form, subcategory: nextValue })}
+                        disabled={!authenticated || !form.category}
+                        placeholder={form.category ? 'Select subcategory' : 'Pick category first'}
+                        options={toSelectOptions(activeSubcategoryOptions, form.subcategory)}
                       />
                     </div>
 
@@ -838,23 +976,29 @@ export default function CardDetailPage() {
                     </div>
                   </div>
 
+                  {isWanted ? (
+                    <p className="message">
+                      Wanted cards keep wishlist priority and notes active. Copy-specific fields like condition, grade, autograph state, and sale/trade controls are disabled.
+                    </p>
+                  ) : null}
+
                   <div className="field-grid field-grid--three">
                     <div className="field">
                       <label htmlFor="status">Status</label>
-                      <select
-                        id="status"
+                      <ThemedSelect
                         value={form.collectionStatus}
-                        onChange={(event) =>
+                        onChange={(nextValue) =>
                           setForm({
                             ...form,
-                            collectionStatus: event.target.value as CollectionStatus,
+                            collectionStatus: nextValue as CollectionStatus,
                           })
                         }
                         disabled={!authenticated}
-                      >
-                        <option value="OWNED">Owned</option>
-                        <option value="WANTED">Wanted</option>
-                      </select>
+                        options={[
+                          { value: 'OWNED', label: 'Owned' },
+                          { value: 'WANTED', label: 'Wanted' },
+                        ]}
+                      />
                     </div>
 
                     <div className="field">
@@ -863,7 +1007,7 @@ export default function CardDetailPage() {
                         id="condition"
                         value={form.condition}
                         onChange={(event) => setForm({ ...form, condition: event.target.value })}
-                        disabled={!authenticated}
+                        disabled={!authenticated || isWanted}
                       />
                     </div>
 
@@ -875,7 +1019,7 @@ export default function CardDetailPage() {
                         onChange={(event) =>
                           setForm({ ...form, gradeEstimate: event.target.value })
                         }
-                        disabled={!authenticated}
+                        disabled={!authenticated || isWanted}
                       />
                     </div>
 
@@ -888,7 +1032,7 @@ export default function CardDetailPage() {
                         onChange={(event) =>
                           setForm({ ...form, askingPriceCents: event.target.value })
                         }
-                        disabled={!authenticated}
+                        disabled={!authenticated || isWanted}
                       />
                     </div>
 
@@ -911,7 +1055,7 @@ export default function CardDetailPage() {
                         onChange={(event) =>
                           setForm({ ...form, autographFormat: event.target.value })
                         }
-                        disabled={!authenticated}
+                        disabled={!authenticated || isWanted}
                       />
                     </div>
                   </div>
@@ -924,7 +1068,7 @@ export default function CardDetailPage() {
                         onChange={(event) =>
                           setForm({ ...form, isAutographed: event.target.checked })
                         }
-                        disabled={!authenticated}
+                        disabled={!authenticated || isWanted}
                       />
                       <span>Autographed copy</span>
                     </label>
@@ -960,7 +1104,7 @@ export default function CardDetailPage() {
                         onChange={(event) =>
                           setForm({ ...form, isForTrade: event.target.checked })
                         }
-                        disabled={!authenticated}
+                        disabled={!authenticated || isWanted}
                       />
                       <span>Available for trade</span>
                     </label>
@@ -972,7 +1116,7 @@ export default function CardDetailPage() {
                         onChange={(event) =>
                           setForm({ ...form, isForSale: event.target.checked })
                         }
-                        disabled={!authenticated}
+                        disabled={!authenticated || isWanted}
                       />
                       <span>Available for sale</span>
                     </label>

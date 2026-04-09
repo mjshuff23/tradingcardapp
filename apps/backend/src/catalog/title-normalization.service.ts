@@ -8,6 +8,7 @@ import {
 } from '../common/catalog-normalization.util';
 import { normalizeText } from '../common/normalize.util';
 import { CatalogSearchFilters } from './catalog-query.service';
+import { inferTaxonomyFromText } from './card-taxonomy';
 
 export type NormalizedTitleFields = {
   name?: string | null;
@@ -34,6 +35,7 @@ export type TitleNormalizationResult = {
   confidence: number;
   usedAi: boolean;
   search: CatalogSearchFilters;
+  changedFields: string[];
   debug?: Record<string, unknown> | null;
 };
 
@@ -62,6 +64,29 @@ const SPORT_KEYWORDS: Array<{ token: string; value: string }> = [
   { token: 'soccer', value: 'Soccer' },
   { token: 'pokemon', value: 'Pokemon' },
   { token: 'golf', value: 'Golf' },
+  { token: 'racing', value: 'Racing' },
+  { token: 'wrestling', value: 'Wrestling' },
+  { token: 'mma', value: 'MMA' },
+];
+
+const SET_NAME_KEYWORDS = [
+  'sp authentic',
+  'stadium club',
+  'magic the gathering',
+  'one piece',
+  'dragon ball',
+  'spx',
+  'finest',
+  'chrome',
+  'optic',
+  'prizm',
+  'select',
+  'hoops',
+  'score',
+  'bowman',
+  'topps',
+  'panini',
+  'upper deck',
 ];
 
 @Injectable()
@@ -116,6 +141,21 @@ export class TitleNormalizationService {
       }
     }
 
+    if (!fields.setName) {
+      const matchedSetName = SET_NAME_KEYWORDS.find((keyword) =>
+        normalizeText(normalizedRawTitle).includes(normalizeText(keyword)),
+      );
+
+      if (matchedSetName) {
+        fields.setName = titleCasePhrase(matchedSetName);
+        fieldConfidence.setName = seeded.setName ? 0.98 : 0.81;
+        working = working.replace(
+          new RegExp(`\\b${matchedSetName.replace(/\s+/g, '\\s+')}\\b`, 'i'),
+          ' ',
+        );
+      }
+    }
+
     for (const sport of SPORT_KEYWORDS) {
       if (new RegExp(`\\b${sport.token}\\b`, 'i').test(working)) {
         fields.sport = sport.value;
@@ -134,6 +174,19 @@ export class TitleNormalizationService {
     if (/\b(vintage|classic|old school|rookie)\b/i.test(working)) {
       fields.isVintage = true;
       fieldConfidence.isVintage = 0.62;
+    }
+
+    const taxonomy = inferTaxonomyFromText(
+      `${normalizedRawTitle} ${fields.sport ?? ''}`,
+      fields.sport,
+    );
+    if (!fields.category && taxonomy.category) {
+      fields.category = taxonomy.category;
+      fieldConfidence.category = 0.74;
+    }
+    if (!fields.subcategory && taxonomy.subcategory) {
+      fields.subcategory = taxonomy.subcategory;
+      fieldConfidence.subcategory = 0.78;
     }
 
     const cleanedLeftovers = working
@@ -191,6 +244,7 @@ export class TitleNormalizationService {
       confidence,
       usedAi: false,
       search,
+      changedFields: buildChangedFields(seeded, fields),
       debug: {
         leftoverText: cleanedLeftovers,
       },
@@ -212,6 +266,7 @@ export class TitleNormalizationService {
         openAiApiKey,
         model,
         deterministic,
+        seeded,
       });
 
       if (!refined) {
@@ -250,6 +305,7 @@ export class TitleNormalizationService {
     openAiApiKey: string;
     model: string;
     deterministic: TitleNormalizationResult;
+    seeded: NormalizedTitleFields;
   }): Promise<TitleNormalizationResult | null> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -340,6 +396,7 @@ export class TitleNormalizationService {
           mergedFields,
           normalizeNullableText(parsed.cleanedSearchText ?? undefined) ?? input.deterministic.cleanedSearchText,
         ),
+        changedFields: buildChangedFields(input.seeded, mergedFields),
       };
     } finally {
       clearTimeout(timeoutId);
@@ -403,4 +460,36 @@ function mergeConfidence(
     merged[key] = Math.max(merged[key] ?? 0, value);
   }
   return merged;
+}
+
+function buildChangedFields(
+  previous: NormalizedTitleFields,
+  next: NormalizedTitleFields,
+): string[] {
+  const changed = new Set<string>();
+
+  for (const [key, value] of Object.entries(next) as Array<
+    [keyof NormalizedTitleFields, string | number | boolean | null | undefined]
+  >) {
+    if (value === undefined) {
+      continue;
+    }
+
+    if (!sameValue(previous[key], value)) {
+      changed.add(key);
+    }
+  }
+
+  return [...changed];
+}
+
+function sameValue(
+  left: string | number | boolean | null | undefined,
+  right: string | number | boolean | null | undefined,
+) {
+  if ((left === null || left === undefined || left === '') && (right === null || right === undefined || right === '')) {
+    return true;
+  }
+
+  return left === right;
 }

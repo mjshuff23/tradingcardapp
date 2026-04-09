@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import path from 'node:path';
 import sharp from 'sharp';
@@ -27,11 +27,16 @@ type OcrAttempt = {
 };
 
 @Injectable()
-export class OcrService implements OnModuleDestroy {
+export class OcrService implements OnModuleDestroy, OnModuleInit {
   private readonly logger = new Logger(OcrService.name);
   private workerPromise: Promise<Tesseract.Worker> | null = null;
 
   constructor(private readonly configService: ConfigService) {}
+
+  onModuleInit() {
+    const provider = (this.configService.get<string>('OCR_PROVIDER') ?? 'tesseract').toLowerCase();
+    this.logger.log(`Active OCR provider: ${provider}`);
+  }
 
   async extractText(input: OcrExtractInput): Promise<OcrExtractResult> {
     const provider = (this.configService.get<string>('OCR_PROVIDER') ?? 'tesseract').toLowerCase();
@@ -155,6 +160,22 @@ export class OcrService implements OnModuleDestroy {
       }
     }
 
+    const numericRegions = regionBuffers.filter(
+      (region) => region.name === 'top' || region.name === 'right' || region.name === 'numberStrip',
+    );
+    for (const region of numericRegions) {
+      const attempt = await this.runAttempt(
+        worker,
+        region.buffer,
+        `${sideLabel}:numeric:${region.name}`,
+        Tesseract.PSM.SINGLE_LINE,
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#-/: ',
+      );
+      if (attempt) {
+        attempts.push(attempt);
+      }
+    }
+
     if (!attempts.length) {
       return '';
     }
@@ -164,7 +185,7 @@ export class OcrService implements OnModuleDestroy {
       .sort((a, b) => b.quality - a.quality)
       .map((item) => item.text)
       .filter((value, index, array) => array.indexOf(value) === index)
-      .slice(0, 2);
+      .slice(0, 3);
 
     const merged = topTexts.join(' ').replace(/\s+/g, ' ').trim();
 
@@ -182,10 +203,12 @@ export class OcrService implements OnModuleDestroy {
     image: Buffer,
     label: string,
     psm: Tesseract.PSM,
+    charWhitelist?: string,
   ): Promise<OcrAttempt | null> {
     await worker.setParameters({
       tessedit_pageseg_mode: psm,
       preserve_interword_spaces: '1',
+      tessedit_char_whitelist: charWhitelist ?? '',
     });
 
     const result = await worker.recognize(image);
@@ -241,7 +264,9 @@ export class OcrService implements OnModuleDestroy {
 
   private async createRegionBuffers(
     imageBuffer: Buffer,
-  ): Promise<Array<{ name: 'top' | 'bottom' | 'right' | 'center'; buffer: Buffer }>> {
+  ): Promise<
+    Array<{ name: 'top' | 'bottom' | 'right' | 'center' | 'left' | 'numberStrip'; buffer: Buffer }>
+  > {
     const image = sharp(imageBuffer);
     const metadata = await image.metadata();
     const width = metadata.width ?? 0;
@@ -254,10 +279,12 @@ export class OcrService implements OnModuleDestroy {
     const topHeight = Math.max(120, Math.floor(height * 0.24));
     const bottomHeight = Math.max(140, Math.floor(height * 0.26));
     const rightWidth = Math.max(120, Math.floor(width * 0.24));
+    const leftWidth = Math.max(120, Math.floor(width * 0.2));
     const centerHeight = Math.max(160, Math.floor(height * 0.28));
     const centerTop = Math.max(0, Math.floor((height - centerHeight) / 2));
+    const numberStripHeight = Math.max(100, Math.floor(height * 0.14));
 
-    const [top, bottom, right, center] = await Promise.all([
+    const [top, bottom, right, center, left, numberStrip] = await Promise.all([
       image
         .clone()
         .extract({ left: 0, top: 0, width, height: Math.min(topHeight, height) })
@@ -275,7 +302,22 @@ export class OcrService implements OnModuleDestroy {
         .toBuffer(),
       image
         .clone()
+        .extract({ left: 0, top: 0, width: Math.min(leftWidth, width), height })
+        .png()
+        .toBuffer(),
+      image
+        .clone()
         .extract({ left: 0, top: centerTop, width, height: Math.min(centerHeight, height) })
+        .png()
+        .toBuffer(),
+      image
+        .clone()
+        .extract({
+          left: 0,
+          top: Math.max(0, height - numberStripHeight),
+          width,
+          height: Math.min(numberStripHeight, height),
+        })
         .png()
         .toBuffer(),
     ]);
@@ -284,7 +326,9 @@ export class OcrService implements OnModuleDestroy {
       { name: 'top', buffer: top },
       { name: 'bottom', buffer: bottom },
       { name: 'right', buffer: right },
+      { name: 'left', buffer: left },
       { name: 'center', buffer: center },
+      { name: 'numberStrip', buffer: numberStrip },
     ];
   }
 

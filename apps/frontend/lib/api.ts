@@ -28,7 +28,12 @@ export type ScanCandidate = {
   id: number;
   name: string;
   set: string | null;
+  setName: string | null;
+  legacySetText: string | null;
+  brand: string | null;
   year: number | null;
+  season: string | null;
+  cardNumber: string | null;
   player: string | null;
   variant: string | null;
   sport: string | null;
@@ -148,7 +153,38 @@ export type NormalizeTitleResult = {
   fieldConfidence: Record<string, number>;
   confidence: number;
   usedAi: boolean;
+  search: Partial<{
+    searchText: string;
+    collectionStatus: CollectionStatus;
+    year: number;
+    sport: string;
+    cardNumber: string;
+    brand: string;
+    setName: string;
+    season: string;
+    isForTrade: boolean;
+    isForSale: boolean;
+    isAutographed: boolean;
+    isVintage: boolean;
+    priority: number;
+  }>;
+  changedFields: string[];
   debug?: Record<string, unknown> | null;
+};
+
+export type CardTaxonomySubcategory = {
+  name: string;
+  keywords: string[];
+};
+
+export type CardTaxonomyGroup = {
+  category: string;
+  keywords: string[];
+  subcategories: CardTaxonomySubcategory[];
+};
+
+export type CardTaxonomy = {
+  groups: CardTaxonomyGroup[];
 };
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -374,6 +410,10 @@ export async function normalizeCardTitle(payload: {
     },
     body: JSON.stringify(payload),
   });
+}
+
+export async function getCardTaxonomy(): Promise<CardTaxonomy> {
+  return request<CardTaxonomy>('/cards/taxonomy');
 }
 
 export async function listCards(params: {

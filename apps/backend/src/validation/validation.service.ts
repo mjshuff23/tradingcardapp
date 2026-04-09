@@ -5,9 +5,15 @@ import { SourceHint } from '../common/source-hint.type';
 export type CandidateForValidation = {
   name: string;
   set?: string | null;
+  setName?: string | null;
+  legacySetText?: string | null;
+  brand?: string | null;
   year?: number | null;
+  season?: string | null;
+  cardNumber?: string | null;
   player?: string | null;
   variant?: string | null;
+  sport?: string | null;
 };
 
 @Injectable()
@@ -16,7 +22,17 @@ export class ValidationService {
     validationScore: number;
     sourceHints: SourceHint[];
   } {
-    const query = [candidate.year, candidate.player, candidate.name, candidate.set, candidate.variant]
+    const query = [
+      candidate.year,
+      candidate.season,
+      candidate.brand,
+      candidate.setName ?? candidate.set ?? candidate.legacySetText,
+      candidate.cardNumber ? `#${candidate.cardNumber}` : null,
+      candidate.player,
+      candidate.name,
+      candidate.variant,
+      candidate.sport,
+    ]
       .filter(Boolean)
       .join(' ')
       .trim();

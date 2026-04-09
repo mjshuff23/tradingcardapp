@@ -5,6 +5,7 @@ import { AppShell } from '../components/AppShell';
 import { CardImage } from '../components/CardImage';
 import { PageHeader } from '../components/PageHeader';
 import { StatusPill } from '../components/StatusPill';
+import { ThemedSelect } from '../components/ThemedSelect';
 import { useAuth } from '../lib/auth-context';
 import {
   CardListItem,
@@ -175,31 +176,29 @@ export default function BinderPage() {
               <label className="toolbar-label" htmlFor="binder-mode">
                 Query mode
               </label>
-              <select
-                id="binder-mode"
-                className="toolbar-select"
+              <ThemedSelect
                 value={queryMode}
-                onChange={(event) => setQueryMode(event.target.value as CardQueryMode)}
-              >
-                <option value="text">Text</option>
-                <option value="nl">Natural language</option>
-              </select>
+                onChange={(nextValue) => setQueryMode(nextValue as CardQueryMode)}
+                options={[
+                  { value: 'text', label: 'Text' },
+                  { value: 'nl', label: 'Natural language' },
+                ]}
+              />
             </div>
 
             <div className="toolbar__group">
               <label className="toolbar-label" htmlFor="binder-filter">
                 Status
               </label>
-              <select
-                id="binder-filter"
-                className="toolbar-select"
+              <ThemedSelect
                 value={filter}
-                onChange={(event) => setFilter(event.target.value as Filter)}
-              >
-                <option value="ALL">All statuses</option>
-                <option value="OWNED">Owned</option>
-                <option value="WANTED">Wanted</option>
-              </select>
+                onChange={(nextValue) => setFilter(nextValue as Filter)}
+                options={[
+                  { value: 'ALL', label: 'All statuses' },
+                  { value: 'OWNED', label: 'Owned' },
+                  { value: 'WANTED', label: 'Wanted' },
+                ]}
+              />
             </div>
 
             <button className="button-secondary" type="submit" disabled={busy}>

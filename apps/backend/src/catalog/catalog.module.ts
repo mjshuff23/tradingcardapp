@@ -17,6 +17,6 @@ import { TitleNormalizationService } from './title-normalization.service';
     StorageService,
     TitleNormalizationService,
   ],
-  exports: [CatalogService, CatalogIndexService],
+  exports: [CatalogService, CatalogIndexService, TitleNormalizationService],
 })
 export class CatalogModule {}

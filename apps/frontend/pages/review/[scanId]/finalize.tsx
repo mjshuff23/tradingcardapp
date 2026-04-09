@@ -6,12 +6,16 @@ import { AppShell } from '../../../components/AppShell';
 import { CardImage } from '../../../components/CardImage';
 import { PageHeader } from '../../../components/PageHeader';
 import { StatusPill } from '../../../components/StatusPill';
+import { SuggestionPreview } from '../../../components/SuggestionPreview';
+import { ThemedSelect, ThemedSelectOption } from '../../../components/ThemedSelect';
 import { useAuth } from '../../../lib/auth-context';
 import {
+  CardTaxonomy,
   CollectionStatus,
   ScanCandidate,
   ScanResponse,
   confirmScan,
+  getCardTaxonomy,
   getScan,
   normalizeCardTitle,
 } from '../../../lib/api';
@@ -72,10 +76,12 @@ function parseOptionalNumber(value: string) {
 
 function candidateToRawTitle(candidate: ScanCandidate) {
   return [
-    candidate.year,
+    candidate.season ?? candidate.year,
+    candidate.brand,
     candidate.player,
     candidate.name,
-    candidate.set,
+    candidate.setName ?? candidate.legacySetText ?? candidate.set,
+    candidate.cardNumber ? `#${candidate.cardNumber}` : null,
     candidate.variant,
     candidate.sport,
   ]
@@ -88,12 +94,12 @@ function buildInitialForm(candidate: ScanCandidate) {
     rawTitle: candidateToRawTitle(candidate),
     name: candidate.name ?? '',
     player: candidate.player ?? '',
-    set: candidate.set ?? '',
-    setName: candidate.set ?? '',
-    brand: '',
+    set: candidate.legacySetText ?? candidate.set ?? '',
+    setName: candidate.setName ?? candidate.set ?? '',
+    brand: candidate.brand ?? '',
     year: candidate.year ? String(candidate.year) : '',
-    season: '',
-    cardNumber: '',
+    season: candidate.season ?? '',
+    cardNumber: candidate.cardNumber ?? '',
     variant: candidate.variant ?? '',
     sport: candidate.sport ?? '',
     category: '',
@@ -142,6 +148,77 @@ function applyNormalization(
   };
 }
 
+const NORMALIZATION_FIELD_LABELS: Record<string, string> = {
+  name: 'Card name',
+  player: 'Player',
+  brand: 'Brand',
+  setName: 'Set name',
+  yearManufactured: 'Year',
+  season: 'Season',
+  cardNumber: 'Card number',
+  sport: 'Sport',
+  variant: 'Variant',
+  category: 'Category',
+  subcategory: 'Subcategory',
+  hasAutographVariant: 'Auto variant exists',
+  isVintage: 'Vintage flag',
+};
+
+function buildSuggestionItems(
+  form: FinalizeFormState,
+  normalized: Awaited<ReturnType<typeof normalizeCardTitle>> | null,
+) {
+  if (!normalized) {
+    return [];
+  }
+
+  const currentValues: Record<string, string> = {
+    name: form.name || 'Empty',
+    player: form.player || 'Empty',
+    brand: form.brand || 'Empty',
+    setName: form.setName || 'Empty',
+    yearManufactured: form.year || 'Empty',
+    season: form.season || 'Empty',
+    cardNumber: form.cardNumber || 'Empty',
+    sport: form.sport || 'Empty',
+    variant: form.variant || 'Empty',
+    category: form.category || 'Empty',
+    subcategory: form.subcategory || 'Empty',
+    hasAutographVariant: form.hasAutographVariant ? 'Yes' : 'No',
+    isVintage: form.isVintage ? 'Yes' : 'No',
+  };
+
+  return normalized.changedFields.map((field) => {
+    const suggestedValue = normalized.fields[field as keyof typeof normalized.fields];
+    return {
+      field: NORMALIZATION_FIELD_LABELS[field] ?? field,
+      previous: currentValues[field] ?? 'Empty',
+      next:
+        typeof suggestedValue === 'boolean'
+          ? suggestedValue
+            ? 'Yes'
+            : 'No'
+          : suggestedValue === null || suggestedValue === undefined || suggestedValue === ''
+            ? 'Empty'
+            : String(suggestedValue),
+    };
+  });
+}
+
+function toSelectOptions(values: string[], currentValue?: string | null): ThemedSelectOption[] {
+  const unique = Array.from(new Set([...values, currentValue ?? ''].filter(Boolean)));
+  return unique.map((value) => ({ value, label: value }));
+}
+
+function subcategoryOptions(taxonomy: CardTaxonomy | null, category: string | null | undefined) {
+  if (!taxonomy || !category) {
+    return [];
+  }
+
+  const group = taxonomy.groups.find((entry) => entry.category === category);
+  return group ? group.subcategories.map((subcategory) => subcategory.name) : [];
+}
+
 export default function FinalizeScanPage() {
   const router = useRouter();
   const { authenticated, loading } = useAuth();
@@ -164,6 +241,10 @@ export default function FinalizeScanPage() {
 
   const [scan, setScan] = useState<ScanResponse | null>(null);
   const [form, setForm] = useState<FinalizeFormState | null>(null);
+  const [taxonomy, setTaxonomy] = useState<CardTaxonomy | null>(null);
+  const [pendingSuggestion, setPendingSuggestion] = useState<Awaited<
+    ReturnType<typeof normalizeCardTitle>
+  > | null>(null);
   const [busy, setBusy] = useState(false);
   const [loadingState, setLoadingState] = useState(true);
   const [normalizing, setNormalizing] = useState(false);
@@ -194,12 +275,16 @@ export default function FinalizeScanPage() {
       setError(null);
 
       try {
-        const payload = await getScan(scanId);
+        const [payload, taxonomyPayload] = await Promise.all([
+          getScan(scanId),
+          getCardTaxonomy(),
+        ]);
         if (stopped) {
           return;
         }
 
         setScan(payload);
+        setTaxonomy(taxonomyPayload);
         const candidate =
           (candidateId !== null
             ? payload.candidates.find((entry) => entry.id === candidateId)
@@ -279,11 +364,13 @@ export default function FinalizeScanPage() {
         },
       });
 
-      setForm((current) => (current ? applyNormalization(current, normalized) : current));
+      setPendingSuggestion(normalized);
       setParserMessage(
         normalized.usedAi
-          ? `AI refinement applied at ${normalized.confidence.toFixed(3)} confidence.`
-          : `Parser suggestions refreshed at ${normalized.confidence.toFixed(3)} confidence.`,
+          ? `AI refinement ready at ${normalized.confidence.toFixed(3)} confidence.`
+          : normalized.changedFields.length
+            ? `Parser suggestions ready at ${normalized.confidence.toFixed(3)} confidence.`
+            : 'No better suggestion found from the current title.',
       );
     } catch (normalizeError) {
       setError((normalizeError as Error).message);
@@ -322,15 +409,27 @@ export default function FinalizeScanPage() {
           subcategory: form.subcategory.trim() || null,
           hasAutographVariant: form.hasAutographVariant,
           isVintage: form.isVintage,
-          condition: form.condition.trim() || null,
+          condition:
+            form.collectionStatus === 'WANTED' ? null : form.condition.trim() || null,
           notes: form.notes.trim() || null,
-          gradeEstimate: form.gradeEstimate.trim() || null,
-          isAutographed: form.isAutographed,
-          autographFormat: form.autographFormat.trim() || null,
-          isForTrade: form.isForTrade,
-          isForSale: form.isForSale,
-          askingPriceCents: parseOptionalNumber(form.askingPriceCents),
-          priority: parseOptionalNumber(form.priority),
+          gradeEstimate:
+            form.collectionStatus === 'WANTED' ? null : form.gradeEstimate.trim() || null,
+          isAutographed:
+            form.collectionStatus === 'WANTED' ? false : form.isAutographed,
+          autographFormat:
+            form.collectionStatus === 'WANTED' ? null : form.autographFormat.trim() || null,
+          isForTrade:
+            form.collectionStatus === 'WANTED' ? false : form.isForTrade,
+          isForSale:
+            form.collectionStatus === 'WANTED' ? false : form.isForSale,
+          askingPriceCents:
+            form.collectionStatus === 'WANTED'
+              ? null
+              : parseOptionalNumber(form.askingPriceCents),
+          priority:
+            form.collectionStatus === 'WANTED'
+              ? parseOptionalNumber(form.priority)
+              : null,
         },
       });
 
@@ -341,6 +440,21 @@ export default function FinalizeScanPage() {
       setBusy(false);
     }
   };
+
+  const applyPendingSuggestion = () => {
+    if (!form || !pendingSuggestion) {
+      return;
+    }
+
+    setForm(applyNormalization(form, pendingSuggestion));
+    setPendingSuggestion(null);
+    setParserMessage('Suggested fields applied to the draft.');
+  };
+
+  const isWanted = form?.collectionStatus === 'WANTED';
+  const categoryOptions = taxonomy?.groups.map((group) => group.category) ?? [];
+  const activeSubcategoryOptions = subcategoryOptions(taxonomy, form?.category);
+  const suggestionItems = form ? buildSuggestionItems(form, pendingSuggestion) : [];
 
   return (
     <AppShell>
@@ -385,6 +499,22 @@ export default function FinalizeScanPage() {
 
         {scan && selectedCandidate && form ? (
           <form className="stack" onSubmit={handleSubmit}>
+            {pendingSuggestion ? (
+              <SuggestionPreview
+                title="Suggestion preview"
+                subtitle={
+                  pendingSuggestion.usedAi
+                    ? `AI refinement suggested ${pendingSuggestion.changedFields.length} field change(s).`
+                    : `Parser pass suggested ${pendingSuggestion.changedFields.length} field change(s).`
+                }
+                items={suggestionItems}
+                emptyMessage="No better suggestion found from the current title."
+                applyLabel="Apply suggestions"
+                onApply={applyPendingSuggestion}
+                onDismiss={() => setPendingSuggestion(null)}
+              />
+            ) : null}
+
             {(scan.frontImageUrl || scan.backImageUrl) ? (
               <section className="surface">
                 <div className="section-header">
@@ -486,11 +616,29 @@ export default function FinalizeScanPage() {
                 </div>
                 <div className="field">
                   <label htmlFor="category">Category</label>
-                  <input id="category" value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} />
+                  <ThemedSelect
+                    value={form.category}
+                    onChange={(nextValue) =>
+                      setForm({
+                        ...form,
+                        category: nextValue,
+                        subcategory:
+                          nextValue === form.category ? form.subcategory : '',
+                      })
+                    }
+                    placeholder="Select category"
+                    options={toSelectOptions(categoryOptions, form.category)}
+                  />
                 </div>
                 <div className="field">
                   <label htmlFor="subcategory">Subcategory</label>
-                  <input id="subcategory" value={form.subcategory} onChange={(event) => setForm({ ...form, subcategory: event.target.value })} />
+                  <ThemedSelect
+                    value={form.subcategory}
+                    onChange={(nextValue) => setForm({ ...form, subcategory: nextValue })}
+                    placeholder={form.category ? 'Select subcategory' : 'Pick category first'}
+                    disabled={!form.category}
+                    options={toSelectOptions(activeSubcategoryOptions, form.subcategory)}
+                  />
                 </div>
               </div>
 
@@ -514,33 +662,41 @@ export default function FinalizeScanPage() {
                 </div>
               </div>
 
+              {isWanted ? (
+                <p className="message">
+                  Wanted cards keep wishlist priority and notes active. Copy-specific fields like condition, grade, autograph state, and sale/trade controls are disabled.
+                </p>
+              ) : null}
+
               <div className="field-grid field-grid--three">
                 <div className="field">
                   <label htmlFor="collectionStatus">Status</label>
-                  <select
-                    id="collectionStatus"
+                  <ThemedSelect
                     value={form.collectionStatus}
-                    onChange={(event) => setForm({ ...form, collectionStatus: event.target.value as CollectionStatus })}
-                  >
-                    <option value="OWNED">Owned</option>
-                    <option value="WANTED">Wanted</option>
-                  </select>
+                    onChange={(nextValue) =>
+                      setForm({ ...form, collectionStatus: nextValue as CollectionStatus })
+                    }
+                    options={[
+                      { value: 'OWNED', label: 'Owned' },
+                      { value: 'WANTED', label: 'Wanted' },
+                    ]}
+                  />
                 </div>
                 <div className="field">
                   <label htmlFor="condition">Condition</label>
-                  <input id="condition" value={form.condition} onChange={(event) => setForm({ ...form, condition: event.target.value })} />
+                  <input id="condition" value={form.condition} onChange={(event) => setForm({ ...form, condition: event.target.value })} disabled={isWanted} />
                 </div>
                 <div className="field">
                   <label htmlFor="gradeEstimate">Grade estimate</label>
-                  <input id="gradeEstimate" value={form.gradeEstimate} onChange={(event) => setForm({ ...form, gradeEstimate: event.target.value })} />
+                  <input id="gradeEstimate" value={form.gradeEstimate} onChange={(event) => setForm({ ...form, gradeEstimate: event.target.value })} disabled={isWanted} />
                 </div>
                 <div className="field">
                   <label htmlFor="autographFormat">Autograph format</label>
-                  <input id="autographFormat" value={form.autographFormat} onChange={(event) => setForm({ ...form, autographFormat: event.target.value })} />
+                  <input id="autographFormat" value={form.autographFormat} onChange={(event) => setForm({ ...form, autographFormat: event.target.value })} disabled={isWanted} />
                 </div>
                 <div className="field">
                   <label htmlFor="askingPriceCents">Asking price (cents)</label>
-                  <input id="askingPriceCents" value={form.askingPriceCents} onChange={(event) => setForm({ ...form, askingPriceCents: event.target.value })} />
+                  <input id="askingPriceCents" value={form.askingPriceCents} onChange={(event) => setForm({ ...form, askingPriceCents: event.target.value })} disabled={isWanted} />
                 </div>
                 <div className="field">
                   <label htmlFor="priority">Wishlist priority</label>
@@ -554,15 +710,15 @@ export default function FinalizeScanPage() {
 
               <div className="toggle-row">
                 <label className="checkbox">
-                  <input type="checkbox" checked={form.isAutographed} onChange={(event) => setForm({ ...form, isAutographed: event.target.checked })} />
+                  <input type="checkbox" checked={form.isAutographed} onChange={(event) => setForm({ ...form, isAutographed: event.target.checked })} disabled={isWanted} />
                   <span>This copy is signed</span>
                 </label>
                 <label className="checkbox">
-                  <input type="checkbox" checked={form.isForTrade} onChange={(event) => setForm({ ...form, isForTrade: event.target.checked })} />
+                  <input type="checkbox" checked={form.isForTrade} onChange={(event) => setForm({ ...form, isForTrade: event.target.checked })} disabled={isWanted} />
                   <span>Open to trade</span>
                 </label>
                 <label className="checkbox">
-                  <input type="checkbox" checked={form.isForSale} onChange={(event) => setForm({ ...form, isForSale: event.target.checked })} />
+                  <input type="checkbox" checked={form.isForSale} onChange={(event) => setForm({ ...form, isForSale: event.target.checked })} disabled={isWanted} />
                   <span>Open to sale</span>
                 </label>
               </div>
