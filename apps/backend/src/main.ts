@@ -8,9 +8,7 @@ async function bootstrap() {
     exclude: ['health'],
   });
   app.enableCors({
-    origin: (process.env.CORS_ORIGIN || 'http://localhost:3000')
-      .split(',')
-      .map((value) => value.trim()),
+    origin: buildCorsOriginMatcher(),
   });
 
   const swaggerConfig = new DocumentBuilder()
@@ -23,6 +21,44 @@ async function bootstrap() {
 
   const port = process.env.PORT ? Number(process.env.PORT) : 3001;
   await app.listen(port);
+}
+
+function buildCorsOriginMatcher() {
+  const configuredOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (configuredOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    if (isLocalDevOrigin(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS blocked for origin: ${origin}`), false);
+  };
+}
+
+function isLocalDevOrigin(origin: string) {
+  try {
+    const url = new URL(origin);
+    return (
+      ['localhost', '127.0.0.1'].includes(url.hostname) &&
+      ['http:', 'https:'].includes(url.protocol)
+    );
+  } catch {
+    return false;
+  }
 }
 
 void bootstrap();
