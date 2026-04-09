@@ -35,6 +35,8 @@ model User {
   email         String         @unique
   passwordHash  String
   pfpUrl        String?
+  pfpOriginalImageKey String?
+  pfpThumbnailImageKey String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   sessions      Session[]
@@ -95,6 +97,12 @@ model CardDefinition {
   insertSetName       String?
   cardType            String?
   isVintage           Boolean         @default(false)
+  canonicalImageUrl   String?
+  canonicalOriginalImageKey String?
+  canonicalThumbnailImageKey String?
+  canonicalSourceUserId String?
+  canonicalSelectedAt DateTime?
+  canonicalSelectedByUserId String?
   metadata            Json?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
@@ -145,6 +153,8 @@ model UserWishlist {
   imageUrl          String?
   originalImageKey  String?
   thumbnailImageKey String?
+  frontImageKey     String?
+  backImageKey      String?
   gradeEstimate     String?
   confidence        Float?
   scanJobId         Int?

@@ -7,7 +7,7 @@ import { CardImage } from '../../components/CardImage';
 import { PageHeader } from '../../components/PageHeader';
 import { StatusPill } from '../../components/StatusPill';
 import { useAuth } from '../../lib/auth-context';
-import { confirmScan, getScan, ScanResponse } from '../../lib/api';
+import { getScan, ScanResponse } from '../../lib/api';
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -45,9 +45,7 @@ export default function ReviewScanPage() {
 
   const [scan, setScan] = useState<ScanResponse | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<number | null>(null);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmed, setConfirmed] = useState<number | null>(null);
 
   useEffect(() => {
     if (!authenticated || !scanId || Number.isNaN(scanId)) {
@@ -89,26 +87,15 @@ export default function ReviewScanPage() {
     };
   }, [authenticated, scanId, selectedCandidateId, scan?.status]);
 
-  const handleConfirm = async () => {
+  const handleContinue = async () => {
     if (!scanId || selectedCandidateId === null) {
       return;
     }
 
-    setBusy(true);
-    setError(null);
-
     try {
-      const card = await confirmScan(scanId, {
-        candidateId: selectedCandidateId,
-        collectionStatus: 'OWNED',
-      });
-      setConfirmed(card.id);
-      const refreshed = await getScan(scanId);
-      setScan(refreshed);
-    } catch (confirmError) {
-      setError((confirmError as Error).message);
-    } finally {
-      setBusy(false);
+      await router.push(`/review/${scanId}/finalize?candidateId=${selectedCandidateId}`);
+    } catch (navigationError) {
+      setError((navigationError as Error).message);
     }
   };
 
@@ -165,12 +152,6 @@ export default function ReviewScanPage() {
             {scan ? (
               <>
                 {scan.error ? <p className="message message--error">Error: {scan.error}</p> : null}
-                {confirmed ? (
-                  <p className="message message--success">
-                    Card saved (ID: {confirmed}). <Link href="/binder">Open binder</Link>
-                  </p>
-                ) : null}
-
                 {(scan.status === 'PROCESSING' || scan.status === 'QUEUED') ? (
                   <section className="surface">
                     <h2 className="surface-title">Processing scan</h2>
@@ -228,16 +209,16 @@ export default function ReviewScanPage() {
                       <div>
                         <h2>Candidates</h2>
                         <p className="fine-print">
-                          Pick the best match, then confirm it into the collection.
+                          Pick the best match, then continue to the finalize step before the first save.
                         </p>
                       </div>
                       <button
                         className="button"
                         type="button"
-                        onClick={handleConfirm}
-                        disabled={busy || selectedCandidateId === null}
+                        onClick={handleContinue}
+                        disabled={selectedCandidateId === null}
                       >
-                        {busy ? 'Confirming...' : 'Confirm candidate'}
+                        Continue to finalize
                       </button>
                     </div>
 

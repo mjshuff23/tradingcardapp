@@ -1,12 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { CollectionStatus } from '../prisma/client';
 import { CardQueryMode } from './dto/list-cards-query.dto';
+import { TitleNormalizationService } from './title-normalization.service';
 
 export type CatalogSearchFilters = {
   searchText?: string;
   collectionStatus?: CollectionStatus;
   year?: number;
   sport?: string;
+  cardNumber?: string;
+  brand?: string;
+  setName?: string;
+  season?: string;
   isForTrade?: boolean;
   isForSale?: boolean;
   isAutographed?: boolean;
@@ -16,6 +21,8 @@ export type CatalogSearchFilters = {
 
 @Injectable()
 export class CatalogQueryService {
+  constructor(private readonly titleNormalizationService: TitleNormalizationService) {}
+
   interpret(query: string | undefined, queryMode: CardQueryMode | undefined): CatalogSearchFilters {
     const trimmed = query?.trim();
     if (!trimmed) {
@@ -28,8 +35,11 @@ export class CatalogQueryService {
       };
     }
 
+    const normalized = this.titleNormalizationService.parseDeterministic(trimmed);
     let working = ` ${trimmed.toLowerCase()} `;
-    const filters: CatalogSearchFilters = {};
+    const filters: CatalogSearchFilters = {
+      ...normalized.search,
+    };
 
     const yearMatch = working.match(/\b(19\d{2}|20\d{2})\b/);
     if (yearMatch) {
@@ -87,7 +97,7 @@ export class CatalogQueryService {
     }
 
     const searchText = working.replace(/\s+/g, ' ').trim();
-    if (searchText) {
+    if (searchText && !filters.searchText) {
       filters.searchText = searchText;
     }
 

@@ -29,6 +29,7 @@ function formatCurrency(cents: number | null) {
 
 function buildSignals(card: CardListItem) {
   return [
+    card.imageSource !== 'NONE' ? `Image ${card.imageSource.toLowerCase()}` : null,
     card.definition.cardSet?.sport,
     card.definition.category,
     card.definition.subcategory,
@@ -164,7 +165,7 @@ export default function BinderPage() {
                 onChange={(event) => setQ(event.target.value)}
                 placeholder={
                   queryMode === 'nl'
-                    ? 'Try: vintage basketball autos for trade'
+                    ? 'Try: Michael Jordan #466 Upper Deck 1993-94'
                     : 'Search by player, set, card number, or brand'
                 }
               />
@@ -296,7 +297,17 @@ export default function BinderPage() {
                           <Link className="table-link" href={`/cards/${card.id}`}>
                             {card.title}
                           </Link>
-                          <span className="table-copy">{card.subtitle || 'Catalog metadata still filling in.'}</span>
+                          <span className="table-copy">
+                            {[
+                              card.definition.cardSet?.setName ?? card.definition.legacySetText,
+                              card.definition.cardSet?.season ??
+                                card.definition.cardSet?.yearManufactured,
+                              card.definition.cardNumber ? `#${card.definition.cardNumber}` : null,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ') || 'Catalog metadata still filling in.'}
+                          </span>
+                          {card.subtitle ? <span className="table-note">{card.subtitle}</span> : null}
                           {card.record.notes ? (
                             <span className="table-note">{card.record.notes}</span>
                           ) : null}
@@ -306,7 +317,13 @@ export default function BinderPage() {
                         <div className="table-stack">
                           <strong>{setMeta?.setName ?? card.definition.legacySetText ?? 'Unknown set'}</strong>
                           <span className="table-copy">
-                            {[setMeta?.brand, setMeta?.season, setMeta?.sport]
+                            {[
+                              setMeta?.brand,
+                              setMeta?.yearManufactured,
+                              setMeta?.season,
+                              card.definition.cardNumber ? `#${card.definition.cardNumber}` : null,
+                              setMeta?.sport,
+                            ]
                               .filter(Boolean)
                               .join(' · ') || 'Awaiting set metadata'}
                           </span>

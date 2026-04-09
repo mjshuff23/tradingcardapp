@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -26,7 +31,7 @@ export class StorageService {
   private readonly cardBucket: string;
 
   constructor(private readonly configService: ConfigService) {
-    const endpoint = this.configService.get<string>('S3_ENDPOINT') ?? 'http://localhost:3900';
+    const endpoint = this.configService.get<string>('S3_ENDPOINT') ?? undefined;
     const region = this.configService.get<string>('S3_REGION') ?? 'garage';
     const accessKeyId = this.configService.get<string>('S3_ACCESS_KEY') ?? 'tradingcards';
     const secretAccessKey = this.configService.get<string>('S3_SECRET_KEY') ?? 'tradingcardssecret';
@@ -39,7 +44,7 @@ export class StorageService {
     this.s3Client = new S3Client({
       endpoint,
       region,
-      forcePathStyle: true,
+      forcePathStyle: Boolean(endpoint),
       credentials: {
         accessKeyId,
         secretAccessKey,
@@ -97,6 +102,14 @@ export class StorageService {
 
   async readCanonicalCardImage(key: string): Promise<StoredImageContent> {
     return this.readStoredImage(key, 'card');
+  }
+
+  async deleteCardImage(key: string | null | undefined) {
+    await this.deleteStoredImage(key, 'card');
+  }
+
+  async deleteProfileImage(key: string | null | undefined) {
+    await this.deleteStoredImage(key, 'profile');
   }
 
   private async uploadImageToBucket(input: {
@@ -180,6 +193,31 @@ export class StorageService {
       buffer: Buffer.from(bytes),
       contentType: response.ContentType ?? 'application/octet-stream',
     };
+  }
+
+  private async deleteStoredImage(key: string | null | undefined, target: StorageTarget) {
+    if (!key) {
+      return;
+    }
+
+    if (key.startsWith('http://') || key.startsWith('https://')) {
+      return;
+    }
+
+    if (key.startsWith('local/')) {
+      const localRoot = path.resolve(process.cwd(), '.local-storage');
+      const relativePath = key.replace(/^local\//, '');
+      const filePath = path.join(localRoot, relativePath);
+      await fs.rm(filePath, { force: true });
+      return;
+    }
+
+    await this.s3Client.send(
+      new DeleteObjectCommand({
+        Bucket: this.resolveBucket(target),
+        Key: key,
+      }),
+    );
   }
 
   private resolveBucket(target: StorageTarget) {

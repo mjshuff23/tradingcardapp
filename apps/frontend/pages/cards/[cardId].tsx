@@ -10,7 +10,10 @@ import { useAuth } from '../../lib/auth-context';
 import {
   CardDetail,
   CollectionStatus,
+  clearCardImage,
   getCard,
+  normalizeCardTitle,
+  uploadCardImage,
   updateCard,
 } from '../../lib/api';
 
@@ -130,6 +133,8 @@ export default function CardDetailPage() {
   const [card, setCard] = useState<CardDetail | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cleanupBusy, setCleanupBusy] = useState(false);
+  const [imageBusyKind, setImageBusyKind] = useState<'front' | 'back' | 'canonical' | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -223,6 +228,125 @@ export default function CardDetailPage() {
     }
   };
 
+  const handleCleanup = async () => {
+    if (!form) {
+      return;
+    }
+
+    setCleanupBusy(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const normalized = await normalizeCardTitle({
+        rawTitle: [
+          form.yearManufactured,
+          form.player,
+          form.name,
+          form.brand,
+          form.setName || form.legacySetText,
+          form.cardNumber ? `#${form.cardNumber}` : '',
+          form.variant,
+        ]
+          .filter(Boolean)
+          .join(' '),
+        fields: {
+          name: form.name || null,
+          player: form.player || null,
+          brand: form.brand || null,
+          setName: form.setName || form.legacySetText || null,
+          yearManufactured: parseOptionalNumber(form.yearManufactured),
+          season: form.season || null,
+          cardNumber: form.cardNumber || null,
+          sport: form.sport || null,
+          variant: form.variant || null,
+          category: form.category || null,
+          subcategory: form.subcategory || null,
+          hasAutographVariant: form.hasAutographVariant,
+          isVintage: form.isVintage,
+        },
+      });
+
+      setForm((current) =>
+        current
+          ? {
+              ...current,
+              name: normalized.fields.name ?? current.name,
+              player: normalized.fields.player ?? current.player,
+              brand: normalized.fields.brand ?? current.brand,
+              setName: normalized.fields.setName ?? current.setName,
+              legacySetText: normalized.fields.setName ?? current.legacySetText,
+              yearManufactured:
+                normalized.fields.yearManufactured !== undefined &&
+                normalized.fields.yearManufactured !== null
+                  ? String(normalized.fields.yearManufactured)
+                  : current.yearManufactured,
+              season: normalized.fields.season ?? current.season,
+              cardNumber: normalized.fields.cardNumber ?? current.cardNumber,
+              variant: normalized.fields.variant ?? current.variant,
+              sport: normalized.fields.sport ?? current.sport,
+              category: normalized.fields.category ?? current.category,
+              subcategory: normalized.fields.subcategory ?? current.subcategory,
+              hasAutographVariant:
+                normalized.fields.hasAutographVariant ?? current.hasAutographVariant,
+              isVintage: normalized.fields.isVintage ?? current.isVintage,
+            }
+          : current,
+      );
+      setMessage(
+        normalized.usedAi
+          ? `AI cleanup applied at ${normalized.confidence.toFixed(3)} confidence.`
+          : `Cleanup suggestions applied at ${normalized.confidence.toFixed(3)} confidence.`,
+      );
+    } catch (cleanupError) {
+      setError((cleanupError as Error).message);
+    } finally {
+      setCleanupBusy(false);
+    }
+  };
+
+  const handleUploadImage = async (kind: 'front' | 'back' | 'canonical', file: File | null) => {
+    if (!cardId || !file || !authenticated) {
+      return;
+    }
+
+    setImageBusyKind(kind);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const updated = await uploadCardImage(cardId, kind, file);
+      setCard(updated);
+      setForm(toFormState(updated));
+      setMessage(`${kind === 'canonical' ? 'Canonical' : `${kind} image`} updated.`);
+    } catch (imageError) {
+      setError((imageError as Error).message);
+    } finally {
+      setImageBusyKind(null);
+    }
+  };
+
+  const handleClearImage = async (kind: 'front' | 'back' | 'canonical') => {
+    if (!cardId || !authenticated) {
+      return;
+    }
+
+    setImageBusyKind(kind);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const updated = await clearCardImage(cardId, kind);
+      setCard(updated);
+      setForm(toFormState(updated));
+      setMessage(`${kind === 'canonical' ? 'Canonical' : `${kind} image`} cleared.`);
+    } catch (imageError) {
+      setError((imageError as Error).message);
+    } finally {
+      setImageBusyKind(null);
+    }
+  };
+
   return (
     <AppShell>
       <Head>
@@ -274,6 +398,7 @@ export default function CardDetailPage() {
                         : 'No confidence'
                     }
                   />
+                  <StatusPill label={`Image ${card.imageSource.toLowerCase()}`} />
                 </div>
 
                 <div className="detail-grid detail-grid-spaced">
@@ -317,6 +442,18 @@ export default function CardDetailPage() {
                       {card.record.scanJobId
                         ? `From scan ${card.record.scanJobId}`
                         : 'Imported or edited manually'}
+                    </span>
+                  </div>
+                  <div className="detail-item">
+                    <strong>Image fallback</strong>
+                    <span>
+                      {card.personalImageUrl
+                        ? 'Personal image available'
+                        : card.canonicalImageUrl
+                          ? 'Using canonical fallback'
+                          : card.imageUrl
+                            ? 'Using legacy remote image'
+                            : 'No image source yet'}
                     </span>
                   </div>
                 </div>
@@ -368,6 +505,10 @@ export default function CardDetailPage() {
                     <strong>Last updated</strong>
                     <span>{formatDate(card.record.updatedAt)}</span>
                   </div>
+                  <div className="detail-item">
+                    <strong>Canonical image</strong>
+                    <span>{card.canonicalImageUrl ? 'Available as shared fallback' : 'Not set yet'}</span>
+                  </div>
                 </div>
               </section>
             </aside>
@@ -394,9 +535,105 @@ export default function CardDetailPage() {
                 <section className="surface">
                   <div className="section-header">
                     <div>
+                      <h2>Images</h2>
+                      <p className="fine-print">Personal front/back images live on your card record. Canonical images become the shared fallback for this card definition.</p>
+                    </div>
+                  </div>
+
+                  <div className="preview-grid">
+                    <div className="preview-frame">
+                      <h3>Front / primary</h3>
+                      <CardImage alt={`${card.title} front`} src={card.frontImageUrl ?? card.imageUrl} />
+                      {authenticated ? (
+                        <div className="action-row">
+                          <label className="button-secondary button-file">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(event) => void handleUploadImage('front', event.target.files?.[0] ?? null)}
+                              disabled={imageBusyKind !== null}
+                            />
+                            {imageBusyKind === 'front' ? 'Uploading...' : 'Upload front'}
+                          </label>
+                          <button
+                            className="button-ghost"
+                            type="button"
+                            onClick={() => void handleClearImage('front')}
+                            disabled={imageBusyKind !== null || !card.personalImageUrl}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="preview-frame">
+                      <h3>Back</h3>
+                      <CardImage alt={`${card.title} back`} src={card.backImageUrl} />
+                      {authenticated ? (
+                        <div className="action-row">
+                          <label className="button-secondary button-file">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(event) => void handleUploadImage('back', event.target.files?.[0] ?? null)}
+                              disabled={imageBusyKind !== null}
+                            />
+                            {imageBusyKind === 'back' ? 'Uploading...' : 'Upload back'}
+                          </label>
+                          <button
+                            className="button-ghost"
+                            type="button"
+                            onClick={() => void handleClearImage('back')}
+                            disabled={imageBusyKind !== null || !card.backImageUrl}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="preview-frame">
+                      <h3>Canonical fallback</h3>
+                      <CardImage alt={`${card.title} canonical`} src={card.canonicalImageUrl} />
+                      {authenticated ? (
+                        <div className="action-row">
+                          <label className="button-secondary button-file">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(event) =>
+                                void handleUploadImage('canonical', event.target.files?.[0] ?? null)
+                              }
+                              disabled={imageBusyKind !== null}
+                            />
+                            {imageBusyKind === 'canonical' ? 'Uploading...' : 'Upload canonical'}
+                          </label>
+                          <button
+                            className="button-ghost"
+                            type="button"
+                            onClick={() => void handleClearImage('canonical')}
+                            disabled={imageBusyKind !== null || !card.canonicalImageUrl}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="surface">
+                  <div className="section-header">
+                    <div>
                       <h2>Identity</h2>
                       <p className="fine-print">The public-facing card identity and search hooks.</p>
                     </div>
+                    {authenticated ? (
+                      <button className="button-secondary" type="button" onClick={() => void handleCleanup()} disabled={cleanupBusy}>
+                        {cleanupBusy ? 'Cleaning...' : 'Suggest cleanup'}
+                      </button>
+                    ) : null}
                   </div>
 
                   <div className="field-grid field-grid--three">

@@ -285,12 +285,21 @@ export class ScanService {
     }
 
     const merged = {
-      name: dto.overrides?.name ?? selectedCandidate.name,
-      set: dto.overrides?.set ?? selectedCandidate.set,
-      year: dto.overrides?.year ?? selectedCandidate.year,
-      player: dto.overrides?.player ?? selectedCandidate.player,
-      variant: dto.overrides?.variant ?? selectedCandidate.variant,
-      sport: dto.overrides?.sport ?? selectedCandidate.sport,
+      name: dto.draft?.name ?? selectedCandidate.name,
+      set: dto.draft?.set ?? selectedCandidate.set,
+      setName: dto.draft?.setName ?? selectedCandidate.set,
+      brand: dto.draft?.brand ?? null,
+      year: dto.draft?.year ?? selectedCandidate.year,
+      yearManufactured: dto.draft?.year ?? selectedCandidate.year,
+      player: dto.draft?.player ?? selectedCandidate.player,
+      variant: dto.draft?.variant ?? selectedCandidate.variant,
+      sport: dto.draft?.sport ?? selectedCandidate.sport,
+      season: dto.draft?.season ?? null,
+      cardNumber: dto.draft?.cardNumber ?? null,
+      category: dto.draft?.category ?? null,
+      subcategory: dto.draft?.subcategory ?? null,
+      hasAutographVariant: dto.draft?.hasAutographVariant ?? false,
+      isVintage: dto.draft?.isVintage ?? false,
     };
 
     if (!merged.name) {
@@ -312,6 +321,14 @@ export class ScanService {
       data: { chosen: true },
     });
 
+    const keepScanImage = dto.keepScanImage !== false;
+    const frontImageUrl = keepScanImage
+      ? scanJob.thumbnailImageKey ?? scanJob.originalImageKey
+      : null;
+    const frontOriginalImageKey = keepScanImage ? scanJob.originalImageKey : null;
+    const frontThumbnailImageKey = keepScanImage ? scanJob.thumbnailImageKey : null;
+    const backImageKey = keepScanImage ? scanJob.backThumbnailImageKey ?? null : null;
+
     const record =
       (dto.collectionStatus ?? CollectionStatus.OWNED) === CollectionStatus.WANTED
         ? await this.prisma.userWishlist.upsert({
@@ -322,18 +339,28 @@ export class ScanService {
               },
             },
             update: {
-              imageUrl: scanJob.thumbnailImageKey ?? scanJob.originalImageKey,
-              originalImageKey: scanJob.originalImageKey,
-              thumbnailImageKey: scanJob.thumbnailImageKey,
+              imageUrl: frontImageUrl,
+              originalImageKey: frontOriginalImageKey,
+              thumbnailImageKey: frontThumbnailImageKey,
+              frontImageKey: frontImageUrl,
+              backImageKey,
+              notes: dto.draft?.notes ?? undefined,
+              gradeEstimate: dto.draft?.gradeEstimate ?? undefined,
+              priority: dto.draft?.priority ?? undefined,
               confidence,
               scanJobId: scanJob.id,
             },
             create: {
               userId,
               cardDefinitionId: cardDefinition.id,
-              imageUrl: scanJob.thumbnailImageKey ?? scanJob.originalImageKey,
-              originalImageKey: scanJob.originalImageKey,
-              thumbnailImageKey: scanJob.thumbnailImageKey,
+              imageUrl: frontImageUrl,
+              originalImageKey: frontOriginalImageKey,
+              thumbnailImageKey: frontThumbnailImageKey,
+              frontImageKey: frontImageUrl,
+              backImageKey,
+              notes: dto.draft?.notes ?? null,
+              gradeEstimate: dto.draft?.gradeEstimate ?? null,
+              priority: dto.draft?.priority ?? null,
               confidence,
               scanJobId: scanJob.id,
             },
@@ -342,13 +369,37 @@ export class ScanService {
             data: {
               userId,
               cardDefinitionId: cardDefinition.id,
-              imageUrl: scanJob.thumbnailImageKey ?? scanJob.originalImageKey,
-              originalImageKey: scanJob.originalImageKey,
-              thumbnailImageKey: scanJob.thumbnailImageKey,
+              imageUrl: frontImageUrl,
+              originalImageKey: frontOriginalImageKey,
+              thumbnailImageKey: frontThumbnailImageKey,
+              frontImageKey: frontImageUrl,
+              backImageKey,
+              condition: dto.draft?.condition ?? null,
+              isAutographed: dto.draft?.isAutographed ?? false,
+              autographFormat: dto.draft?.autographFormat ?? null,
+              isForTrade: dto.draft?.isForTrade ?? false,
+              isForSale: dto.draft?.isForSale ?? false,
+              askingPriceCents: dto.draft?.askingPriceCents ?? null,
+              notes: dto.draft?.notes ?? null,
+              gradeEstimate: dto.draft?.gradeEstimate ?? null,
               confidence,
               scanJobId: scanJob.id,
             },
           });
+
+    if (dto.promoteToCanonical && keepScanImage && scanJob.thumbnailImageKey) {
+      await this.prisma.cardDefinition.update({
+        where: { id: cardDefinition.id },
+        data: {
+          canonicalImageUrl: null,
+          canonicalOriginalImageKey: scanJob.originalImageKey,
+          canonicalThumbnailImageKey: scanJob.thumbnailImageKey,
+          canonicalSourceUserId: userId,
+          canonicalSelectedAt: new Date(),
+          canonicalSelectedByUserId: userId,
+        },
+      });
+    }
 
     await this.prisma.scanJob.update({
       where: { id: scanJob.id },

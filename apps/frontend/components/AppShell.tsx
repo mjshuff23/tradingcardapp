@@ -76,6 +76,9 @@ export function AppShell({ children }: AppShellProps) {
                   <strong>{user.username}</strong>
                   <span>{user.email}</span>
                 </div>
+                <Link className="button-ghost button-ghost--compact" href="/profile">
+                  Profile
+                </Link>
                 <button className="button-ghost button-ghost--compact" type="button" onClick={() => void logout()}>
                   Log out
                 </button>

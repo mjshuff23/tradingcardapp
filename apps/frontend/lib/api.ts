@@ -1,6 +1,7 @@
 export type ScanStatus = 'QUEUED' | 'PROCESSING' | 'NEEDS_REVIEW' | 'CONFIRMED' | 'FAILED';
 export type CollectionStatus = 'OWNED' | 'WANTED';
 export type CardQueryMode = 'text' | 'nl';
+export type CardImageSource = 'USER' | 'CANONICAL' | 'LEGACY' | 'NONE';
 
 export type AuthUser = {
   id: string;
@@ -88,11 +89,9 @@ export type CardDefinition = {
 
 export type CardCollectionRecord = {
   collectionStatus: CollectionStatus;
-  imageUrl: string | null;
-  originalImageKey: string | null;
-  thumbnailImageKey: string | null;
-  frontImageKey: string | null;
-  backImageKey: string | null;
+  personalImageUrl: string | null;
+  frontImageUrl: string | null;
+  backImageUrl: string | null;
   condition: string | null;
   isAutographed: boolean;
   autographFormat: string | null;
@@ -113,6 +112,11 @@ export type CardListItem = {
   title: string;
   subtitle: string;
   imageUrl: string | null;
+  imageSource: CardImageSource;
+  canonicalImageUrl: string | null;
+  personalImageUrl: string | null;
+  frontImageUrl: string | null;
+  backImageUrl: string | null;
   collectionStatus: CollectionStatus;
   definition: CardDefinition;
   record: CardCollectionRecord;
@@ -120,7 +124,114 @@ export type CardListItem = {
 
 export type CardDetail = CardListItem;
 
-const API_BASE = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1`;
+export type NormalizedCardFields = {
+  name?: string | null;
+  player?: string | null;
+  brand?: string | null;
+  setName?: string | null;
+  yearManufactured?: number | null;
+  season?: string | null;
+  cardNumber?: string | null;
+  sport?: string | null;
+  variant?: string | null;
+  category?: string | null;
+  subcategory?: string | null;
+  hasAutographVariant?: boolean | null;
+  isVintage?: boolean | null;
+};
+
+export type NormalizeTitleResult = {
+  rawTitle: string;
+  cleanedTitle: string;
+  cleanedSearchText: string | null;
+  fields: NormalizedCardFields;
+  fieldConfidence: Record<string, number>;
+  confidence: number;
+  usedAi: boolean;
+  debug?: Record<string, unknown> | null;
+};
+
+const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_BASE = `${API_ORIGIN}/api/v1`;
+
+function toAbsoluteApiUrl(url: string | null | undefined): string | null {
+  if (!url) {
+    return null;
+  }
+
+  if (
+    url.startsWith('http://') ||
+    url.startsWith('https://') ||
+    url.startsWith('data:') ||
+    url.startsWith('blob:')
+  ) {
+    return url;
+  }
+
+  return `${API_ORIGIN}${url.startsWith('/') ? url : `/${url}`}`;
+}
+
+function normalizeAuthUser(user: AuthUser | null): AuthUser | null {
+  if (!user) {
+    return null;
+  }
+
+  return {
+    ...user,
+    pfpUrl: toAbsoluteApiUrl(user.pfpUrl),
+  };
+}
+
+function normalizeSession(session: AuthSession): AuthSession {
+  return {
+    ...session,
+    user: normalizeAuthUser(session.user),
+  };
+}
+
+function normalizeValidationHint(hint: ValidationHint): ValidationHint {
+  return {
+    ...hint,
+    imageUrl: toAbsoluteApiUrl(hint.imageUrl),
+  };
+}
+
+function normalizeScanCandidate(candidate: ScanCandidate): ScanCandidate {
+  return {
+    ...candidate,
+    sourceHints: candidate.sourceHints?.map(normalizeValidationHint) ?? null,
+  };
+}
+
+function normalizeScan(scan: ScanResponse): ScanResponse {
+  return {
+    ...scan,
+    frontImageUrl: toAbsoluteApiUrl(scan.frontImageUrl),
+    backImageUrl: toAbsoluteApiUrl(scan.backImageUrl),
+    candidates: scan.candidates.map(normalizeScanCandidate),
+  };
+}
+
+function normalizeCardRecord(record: CardCollectionRecord): CardCollectionRecord {
+  return {
+    ...record,
+    personalImageUrl: toAbsoluteApiUrl(record.personalImageUrl),
+    frontImageUrl: toAbsoluteApiUrl(record.frontImageUrl),
+    backImageUrl: toAbsoluteApiUrl(record.backImageUrl),
+  };
+}
+
+function normalizeCard(card: CardListItem): CardListItem {
+  return {
+    ...card,
+    imageUrl: toAbsoluteApiUrl(card.imageUrl),
+    canonicalImageUrl: toAbsoluteApiUrl(card.canonicalImageUrl),
+    personalImageUrl: toAbsoluteApiUrl(card.personalImageUrl),
+    frontImageUrl: toAbsoluteApiUrl(card.frontImageUrl),
+    backImageUrl: toAbsoluteApiUrl(card.backImageUrl),
+    record: normalizeCardRecord(card.record),
+  };
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -153,7 +264,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function getCurrentSession(): Promise<AuthSession> {
-  return request<AuthSession>('/auth/me');
+  return normalizeSession(await request<AuthSession>('/auth/me'));
 }
 
 export async function signup(payload: {
@@ -161,32 +272,32 @@ export async function signup(payload: {
   email: string;
   password: string;
 }): Promise<AuthSession> {
-  return request<AuthSession>('/auth/signup', {
+  return normalizeSession(await request<AuthSession>('/auth/signup', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
-  });
+  }));
 }
 
 export async function login(payload: {
   email: string;
   password: string;
 }): Promise<AuthSession> {
-  return request<AuthSession>('/auth/login', {
+  return normalizeSession(await request<AuthSession>('/auth/login', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
-  });
+  }));
 }
 
 export async function logout(): Promise<AuthSession> {
-  return request<AuthSession>('/auth/logout', {
+  return normalizeSession(await request<AuthSession>('/auth/logout', {
     method: 'POST',
-  });
+  }));
 }
 
 export async function uploadScan(input: {
@@ -206,17 +317,57 @@ export async function uploadScan(input: {
 }
 
 export async function getScan(scanId: number): Promise<ScanResponse> {
-  return request(`/scans/${scanId}`);
+  return normalizeScan(await request<ScanResponse>(`/scans/${scanId}`));
 }
 
 export async function confirmScan(
   scanId: number,
   payload: {
-    candidateId: number;
-    collectionStatus: CollectionStatus;
+    candidateId?: number;
+    collectionStatus?: CollectionStatus;
+    keepScanImage?: boolean;
+    promoteToCanonical?: boolean;
+    draft?: Partial<{
+      name: string;
+      set: string | null;
+      setName: string | null;
+      brand: string | null;
+      year: number | null;
+      player: string | null;
+      variant: string | null;
+      sport: string | null;
+      cardNumber: string | null;
+      season: string | null;
+      category: string | null;
+      subcategory: string | null;
+      hasAutographVariant: boolean | null;
+      isVintage: boolean | null;
+      condition: string | null;
+      notes: string | null;
+      gradeEstimate: string | null;
+      isAutographed: boolean | null;
+      autographFormat: string | null;
+      isForTrade: boolean | null;
+      isForSale: boolean | null;
+      askingPriceCents: number | null;
+      priority: number | null;
+    }>;
   },
 ): Promise<{ id: number }> {
   return request<{ id: number }>(`/scans/${scanId}/confirm`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function normalizeCardTitle(payload: {
+  rawTitle: string;
+  fields?: NormalizedCardFields;
+}): Promise<NormalizeTitleResult> {
+  return request<NormalizeTitleResult>('/cards/normalize-title', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -245,7 +396,7 @@ export async function listCards(params: {
   }
 
   const suffix = searchParams.toString();
-  return request<{
+  const response = await request<{
     items: CardListItem[];
     pagination: {
       page: number;
@@ -254,6 +405,11 @@ export async function listCards(params: {
       totalPages: number;
     };
   }>(`/cards${suffix ? `?${suffix}` : ''}`);
+
+  return {
+    ...response,
+    items: response.items.map(normalizeCard),
+  };
 }
 
 export async function importCardsCsv(file: File): Promise<{
@@ -275,7 +431,7 @@ export async function importCardsCsv(file: File): Promise<{
 }
 
 export async function getCard(cardId: number): Promise<CardDetail> {
-  return request<CardDetail>(`/cards/${cardId}`);
+  return normalizeCard(await request<CardDetail>(`/cards/${cardId}`));
 }
 
 export async function updateCard(
@@ -312,11 +468,50 @@ export async function updateCard(
     gradeEstimate: string | null;
   }>,
 ): Promise<CardDetail> {
-  return request<CardDetail>(`/cards/${cardId}`, {
+  return normalizeCard(await request<CardDetail>(`/cards/${cardId}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
-  });
+  }));
+}
+
+export async function uploadCardImage(
+  cardId: number,
+  kind: 'front' | 'back' | 'canonical',
+  file: File,
+): Promise<CardDetail> {
+  const form = new FormData();
+  form.append('image', file);
+
+  return normalizeCard(await request<CardDetail>(`/cards/${cardId}/images/${kind}`, {
+    method: 'POST',
+    body: form,
+  }));
+}
+
+export async function clearCardImage(
+  cardId: number,
+  kind: 'front' | 'back' | 'canonical',
+): Promise<CardDetail> {
+  return normalizeCard(await request<CardDetail>(`/cards/${cardId}/images/${kind}`, {
+    method: 'DELETE',
+  }));
+}
+
+export async function uploadProfileImage(file: File): Promise<AuthSession> {
+  const form = new FormData();
+  form.append('image', file);
+
+  return normalizeSession(await request<AuthSession>('/auth/me/pfp', {
+    method: 'POST',
+    body: form,
+  }));
+}
+
+export async function clearProfileImage(): Promise<AuthSession> {
+  return normalizeSession(await request<AuthSession>('/auth/me/pfp', {
+    method: 'DELETE',
+  }));
 }

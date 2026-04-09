@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import type { Express } from 'express';
 import { CatalogDraftInput } from '../common/catalog-normalization.util';
 import { CollectionStatus, Prisma } from '../prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,11 +7,19 @@ import { StorageService } from '../storage/storage.service';
 import { CatalogIndexService } from './catalog-index.service';
 import { CatalogQueryService, CatalogSearchFilters } from './catalog-query.service';
 import {
+  CardCollectionRecordDto,
   CardDetailDto,
+  CardImageSourceDto,
   CardListItemDto,
 } from './dto/card-response.dto';
 import { CardQueryMode } from './dto/list-cards-query.dto';
+import { NormalizeTitleFieldsDto } from './dto/normalize-title.dto';
 import { UpdateCardDto } from './dto/update-card.dto';
+import {
+  NormalizedTitleFields,
+  TitleNormalizationResult,
+  TitleNormalizationService,
+} from './title-normalization.service';
 
 const userCardInclude = {
   cardDefinition: {
@@ -43,6 +52,7 @@ export class CatalogService {
     private readonly storageService: StorageService,
     private readonly catalogIndexService: CatalogIndexService,
     private readonly catalogQueryService: CatalogQueryService,
+    private readonly titleNormalizationService: TitleNormalizationService,
   ) {}
 
   async listCards(params: {
@@ -109,6 +119,10 @@ export class CatalogService {
     return this.toCardDetail(card);
   }
 
+  async normalizeTitle(rawTitle: string, fields: NormalizeTitleFieldsDto | NormalizedTitleFields = {}) {
+    return this.titleNormalizationService.normalize(rawTitle, fields);
+  }
+
   async updateCard(cardId: number, userId: string, dto: UpdateCardDto): Promise<CardDetailDto> {
     const current = await this.findCardSource(userId, cardId);
     if (!current) {
@@ -143,6 +157,8 @@ export class CatalogService {
             imageUrl: current.row.imageUrl,
             originalImageKey: current.row.originalImageKey,
             thumbnailImageKey: current.row.thumbnailImageKey,
+            frontImageKey: current.row.frontImageKey,
+            backImageKey: current.row.backImageKey,
             gradeEstimate:
               dto.gradeEstimate !== undefined ? dto.gradeEstimate : current.row.gradeEstimate,
             confidence: current.row.confidence,
@@ -178,8 +194,8 @@ export class CatalogService {
             imageUrl: current.row.imageUrl,
             originalImageKey: current.row.originalImageKey,
             thumbnailImageKey: current.row.thumbnailImageKey,
-            frontImageKey: null,
-            backImageKey: null,
+            frontImageKey: current.row.frontImageKey,
+            backImageKey: current.row.backImageKey,
             isForTrade: dto.isForTrade ?? false,
             isForSale: dto.isForSale ?? false,
             askingPriceCents:
@@ -223,6 +239,8 @@ export class CatalogService {
             cardDefinitionId: cardDefinition.id,
             priority: dto.priority !== undefined ? dto.priority : current.row.priority,
             notes: dto.notes !== undefined ? dto.notes : current.row.notes,
+            frontImageKey: current.row.frontImageKey,
+            backImageKey: current.row.backImageKey,
             gradeEstimate:
               dto.gradeEstimate !== undefined ? dto.gradeEstimate : current.row.gradeEstimate,
           },
@@ -243,25 +261,175 @@ export class CatalogService {
     cardId: number,
     userId: string,
   ): Promise<{ buffer: Buffer; contentType: string }> {
+    return this.getCardImageByKind(cardId, userId, 'primary');
+  }
+
+  async getCardImageByKind(
+    cardId: number,
+    userId: string,
+    kind: 'primary' | 'front' | 'back' | 'canonical',
+  ): Promise<{ buffer: Buffer; contentType: string }> {
     const card = await this.findCardSource(userId, cardId);
     if (!card) {
       throw new NotFoundException('Card not found.');
     }
 
-    const key =
-      card.row.thumbnailImageKey ??
-      card.row.originalImageKey ??
-      card.row.imageUrl;
+    const imageTarget = this.resolveImageTarget(card, kind);
 
-    if (!key) {
+    if (!imageTarget) {
       throw new NotFoundException('Card image not found.');
     }
 
-    if (key.startsWith('http://') || key.startsWith('https://')) {
-      return this.fetchExternalImage(key);
+    if (imageTarget.type === 'remote') {
+      return this.fetchExternalImage(imageTarget.url);
     }
 
-    return this.storageService.readCardImage(key);
+    if (imageTarget.bucket === 'canonical') {
+      return this.storageService.readCanonicalCardImage(imageTarget.key);
+    }
+
+    return this.storageService.readCardImage(imageTarget.key);
+  }
+
+  async uploadCardImage(
+    cardId: number,
+    userId: string,
+    kind: 'front' | 'back' | 'canonical',
+    file: Express.Multer.File,
+  ): Promise<CardDetailDto> {
+    const current = await this.findCardSource(userId, cardId);
+    if (!current) {
+      throw new NotFoundException('Card not found.');
+    }
+
+    if (kind === 'canonical') {
+      const stored = await this.storageService.uploadCanonicalCardImage(file.buffer, file.originalname);
+      await this.prisma.cardDefinition.update({
+        where: { id: current.row.cardDefinition.id },
+        data: {
+          canonicalImageUrl: null,
+          canonicalOriginalImageKey: stored.originalKey,
+          canonicalThumbnailImageKey: stored.thumbnailKey,
+          canonicalSourceUserId: userId,
+          canonicalSelectedAt: new Date(),
+          canonicalSelectedByUserId: userId,
+        },
+      });
+    } else {
+      const stored = await this.storageService.uploadCardImage(file.buffer, file.originalname);
+      const commonData =
+        kind === 'front'
+          ? {
+              imageUrl: stored.thumbnailKey,
+              originalImageKey: stored.originalKey,
+              thumbnailImageKey: stored.thumbnailKey,
+              frontImageKey: stored.thumbnailKey,
+            }
+          : {
+              backImageKey: stored.thumbnailKey,
+            };
+
+      if (current.kind === CollectionStatus.OWNED) {
+        await this.prisma.userCard.update({
+          where: { id: current.row.id },
+          data: commonData,
+        });
+      } else {
+        await this.prisma.userWishlist.update({
+          where: { id: current.row.id },
+          data: commonData,
+        });
+      }
+    }
+
+    const updated = await this.findCardSource(userId, cardId);
+    if (!updated) {
+      throw new NotFoundException('Card not found after image update.');
+    }
+
+    return this.toCardDetail(updated);
+  }
+
+  async clearCardImage(
+    cardId: number,
+    userId: string,
+    kind: 'front' | 'back' | 'canonical',
+  ): Promise<CardDetailDto> {
+    const current = await this.findCardSource(userId, cardId);
+    if (!current) {
+      throw new NotFoundException('Card not found.');
+    }
+
+    if (kind === 'canonical') {
+      await Promise.all([
+        this.storageService.deleteCardImage(current.row.cardDefinition.canonicalOriginalImageKey),
+        this.storageService.deleteCardImage(current.row.cardDefinition.canonicalThumbnailImageKey),
+      ]);
+      await this.prisma.cardDefinition.update({
+        where: { id: current.row.cardDefinition.id },
+        data: {
+          canonicalImageUrl: null,
+          canonicalOriginalImageKey: null,
+          canonicalThumbnailImageKey: null,
+          canonicalSourceUserId: null,
+          canonicalSelectedAt: null,
+          canonicalSelectedByUserId: null,
+        },
+      });
+    } else if (current.kind === CollectionStatus.OWNED) {
+      if (kind === 'front') {
+        await Promise.all([
+          this.storageService.deleteCardImage(current.row.originalImageKey),
+          this.storageService.deleteCardImage(current.row.thumbnailImageKey),
+        ]);
+        await this.prisma.userCard.update({
+          where: { id: current.row.id },
+          data: {
+            imageUrl: null,
+            originalImageKey: null,
+            thumbnailImageKey: null,
+            frontImageKey: null,
+          },
+        });
+      } else {
+        await this.storageService.deleteCardImage(current.row.backImageKey);
+        await this.prisma.userCard.update({
+          where: { id: current.row.id },
+          data: {
+            backImageKey: null,
+          },
+        });
+      }
+    } else if (kind === 'front') {
+      await Promise.all([
+        this.storageService.deleteCardImage(current.row.originalImageKey),
+        this.storageService.deleteCardImage(current.row.thumbnailImageKey),
+      ]);
+      await this.prisma.userWishlist.update({
+        where: { id: current.row.id },
+        data: {
+          imageUrl: null,
+          originalImageKey: null,
+          thumbnailImageKey: null,
+          frontImageKey: null,
+        },
+      });
+    } else {
+      await this.storageService.deleteCardImage(current.row.backImageKey);
+      await this.prisma.userWishlist.update({
+        where: { id: current.row.id },
+        data: {
+          backImageKey: null,
+        },
+      });
+    }
+
+    const updated = await this.findCardSource(userId, cardId);
+    if (!updated) {
+      throw new NotFoundException('Card not found after image clear.');
+    }
+
+    return this.toCardDetail(updated);
   }
 
   private buildUserCardWhere(userId: string, filters: CatalogSearchFilters): Prisma.UserCardWhereInput {
@@ -337,6 +505,64 @@ export class CatalogService {
             },
           },
         ],
+      });
+    }
+
+    if (filters.cardNumber) {
+      clauses.push({
+        cardNumber: {
+          contains: filters.cardNumber,
+          mode: 'insensitive',
+        },
+      });
+    }
+
+    if (filters.brand) {
+      clauses.push({
+        cardSet: {
+          is: {
+            brand: {
+              contains: filters.brand,
+              mode: 'insensitive',
+            },
+          },
+        },
+      });
+    }
+
+    if (filters.setName) {
+      clauses.push({
+        cardSet: {
+          is: {
+            OR: [
+              {
+                setName: {
+                  contains: filters.setName,
+                  mode: 'insensitive',
+                },
+              },
+              {
+                brand: {
+                  contains: filters.setName,
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          },
+        },
+      });
+    }
+
+    if (filters.season) {
+      clauses.push({
+        cardSet: {
+          is: {
+            season: {
+              contains: filters.season,
+              mode: 'insensitive',
+            },
+          },
+        },
       });
     }
 
@@ -462,16 +688,18 @@ export class CatalogService {
       definition.variant,
       cardSet?.season,
     ].filter(Boolean);
+    const imageMeta = this.resolveCardImageMeta(source);
 
     return {
       id: source.row.id,
       title,
       subtitle: subtitleParts.join(' · '),
-      imageUrl:
-        source.row.imageUrl ??
-        source.row.thumbnailImageKey ??
-        source.row.originalImageKey ??
-        null,
+      imageUrl: imageMeta.imageUrl,
+      imageSource: imageMeta.imageSource,
+      canonicalImageUrl: imageMeta.canonicalImageUrl,
+      personalImageUrl: imageMeta.personalImageUrl,
+      frontImageUrl: imageMeta.frontImageUrl,
+      backImageUrl: imageMeta.backImageUrl,
       collectionStatus: source.kind,
       definition: {
         id: definition.id,
@@ -510,50 +738,7 @@ export class CatalogService {
             }
           : null,
       },
-      record:
-        source.kind === CollectionStatus.OWNED
-          ? {
-              collectionStatus: source.kind,
-              imageUrl: source.row.imageUrl ?? null,
-              originalImageKey: source.row.originalImageKey ?? null,
-              thumbnailImageKey: source.row.thumbnailImageKey ?? null,
-              frontImageKey: source.row.frontImageKey ?? null,
-              backImageKey: source.row.backImageKey ?? null,
-              condition: source.row.condition ?? null,
-              isAutographed: source.row.isAutographed,
-              autographFormat: source.row.autographFormat ?? null,
-              isForTrade: source.row.isForTrade,
-              isForSale: source.row.isForSale,
-              askingPriceCents: source.row.askingPriceCents ?? null,
-              priority: null,
-              notes: source.row.notes ?? null,
-              gradeEstimate: source.row.gradeEstimate ?? null,
-              confidence: source.row.confidence ?? null,
-              scanJobId: source.row.scanJobId ?? null,
-              createdAt: source.row.createdAt,
-              updatedAt: source.row.updatedAt,
-            }
-          : {
-              collectionStatus: source.kind,
-              imageUrl: source.row.imageUrl ?? null,
-              originalImageKey: source.row.originalImageKey ?? null,
-              thumbnailImageKey: source.row.thumbnailImageKey ?? null,
-              frontImageKey: null,
-              backImageKey: null,
-              condition: null,
-              isAutographed: false,
-              autographFormat: null,
-              isForTrade: false,
-              isForSale: false,
-              askingPriceCents: null,
-              priority: source.row.priority ?? null,
-              notes: source.row.notes ?? null,
-              gradeEstimate: source.row.gradeEstimate ?? null,
-              confidence: source.row.confidence ?? null,
-              scanJobId: source.row.scanJobId ?? null,
-              createdAt: source.row.createdAt,
-              updatedAt: source.row.updatedAt,
-            },
+      record: this.toCardCollectionRecord(source, imageMeta),
     };
   }
 
@@ -600,4 +785,186 @@ export class CatalogService {
       clearTimeout(timeoutId);
     }
   }
+
+  private toCardCollectionRecord(
+    source: CardSource,
+    imageMeta: ReturnType<CatalogService['resolveCardImageMeta']>,
+  ): CardCollectionRecordDto {
+    if (source.kind === CollectionStatus.OWNED) {
+      return {
+        collectionStatus: source.kind,
+        personalImageUrl: imageMeta.personalImageUrl,
+        frontImageUrl: imageMeta.frontImageUrl,
+        backImageUrl: imageMeta.backImageUrl,
+        condition: source.row.condition ?? null,
+        isAutographed: source.row.isAutographed,
+        autographFormat: source.row.autographFormat ?? null,
+        isForTrade: source.row.isForTrade,
+        isForSale: source.row.isForSale,
+        askingPriceCents: source.row.askingPriceCents ?? null,
+        priority: null,
+        notes: source.row.notes ?? null,
+        gradeEstimate: source.row.gradeEstimate ?? null,
+        confidence: source.row.confidence ?? null,
+        scanJobId: source.row.scanJobId ?? null,
+        createdAt: source.row.createdAt,
+        updatedAt: source.row.updatedAt,
+      };
+    }
+
+    return {
+      collectionStatus: source.kind,
+      personalImageUrl: imageMeta.personalImageUrl,
+      frontImageUrl: imageMeta.frontImageUrl,
+      backImageUrl: imageMeta.backImageUrl,
+      condition: null,
+      isAutographed: false,
+      autographFormat: null,
+      isForTrade: false,
+      isForSale: false,
+      askingPriceCents: null,
+      priority: source.row.priority ?? null,
+      notes: source.row.notes ?? null,
+      gradeEstimate: source.row.gradeEstimate ?? null,
+      confidence: source.row.confidence ?? null,
+      scanJobId: source.row.scanJobId ?? null,
+      createdAt: source.row.createdAt,
+      updatedAt: source.row.updatedAt,
+    };
+  }
+
+  private resolveCardImageMeta(source: CardSource) {
+    const personalImageKey = this.resolvePersonalStoredImageKey(source);
+    const canonicalImageTarget = this.resolveCanonicalImageTarget(source);
+    const legacyImageUrl = this.resolveLegacyRemoteImageUrl(source);
+    const backImageTarget = this.resolveBackImageTarget(source);
+
+    const hasPrimaryImage = Boolean(personalImageKey || canonicalImageTarget || legacyImageUrl);
+    const imageSource = personalImageKey
+      ? CardImageSourceDto.USER
+      : canonicalImageTarget
+        ? CardImageSourceDto.CANONICAL
+        : legacyImageUrl
+          ? CardImageSourceDto.LEGACY
+          : CardImageSourceDto.NONE;
+
+    return {
+      imageUrl: hasPrimaryImage ? this.buildCardImageUrl(source.row.id, 'image') : null,
+      imageSource,
+      canonicalImageUrl: canonicalImageTarget
+        ? this.buildCardImageUrl(source.row.id, 'images/canonical')
+        : null,
+      personalImageUrl: personalImageKey ? this.buildCardImageUrl(source.row.id, 'images/front') : null,
+      frontImageUrl: personalImageKey ? this.buildCardImageUrl(source.row.id, 'images/front') : null,
+      backImageUrl: backImageTarget ? this.buildCardImageUrl(source.row.id, 'images/back') : null,
+    };
+  }
+
+  private buildCardImageUrl(cardId: number, suffix: string) {
+    return `/api/v1/cards/${cardId}/${suffix}`;
+  }
+
+  private resolveImageTarget(source: CardSource, kind: 'primary' | 'front' | 'back' | 'canonical') {
+    if (kind === 'canonical') {
+      return this.resolveCanonicalImageTarget(source);
+    }
+
+    if (kind === 'back') {
+      return this.resolveBackImageTarget(source);
+    }
+
+    if (kind === 'front') {
+      const personalImageKey = this.resolvePersonalStoredImageKey(source);
+      return personalImageKey
+        ? {
+            type: 'stored' as const,
+            bucket: 'card' as const,
+            key: personalImageKey,
+          }
+        : null;
+    }
+
+    const personalImageKey = this.resolvePersonalStoredImageKey(source);
+    if (personalImageKey) {
+      return {
+        type: 'stored' as const,
+        bucket: 'card' as const,
+        key: personalImageKey,
+      };
+    }
+
+    const canonicalImageTarget = this.resolveCanonicalImageTarget(source);
+    if (canonicalImageTarget) {
+      return canonicalImageTarget;
+    }
+
+    const legacyImageUrl = this.resolveLegacyRemoteImageUrl(source);
+    if (legacyImageUrl) {
+      return {
+        type: 'remote' as const,
+        url: legacyImageUrl,
+      };
+    }
+
+    return null;
+  }
+
+  private resolvePersonalStoredImageKey(source: CardSource) {
+    const imageUrl = source.row.imageUrl ?? null;
+    return (
+      source.row.frontImageKey ??
+      source.row.thumbnailImageKey ??
+      (!isHttpUrl(imageUrl) ? imageUrl : null) ??
+      source.row.originalImageKey ??
+      null
+    );
+  }
+
+  private resolveBackImageTarget(source: CardSource) {
+    const backImageKey = source.row.backImageKey ?? null;
+    if (!backImageKey) {
+      return null;
+    }
+
+    return {
+      type: isHttpUrl(backImageKey) ? ('remote' as const) : ('stored' as const),
+      bucket: 'card' as const,
+      key: backImageKey,
+      url: backImageKey,
+    };
+  }
+
+  private resolveCanonicalImageTarget(source: CardSource) {
+    const definition = source.row.cardDefinition;
+    const storedKey =
+      definition.canonicalThumbnailImageKey ??
+      definition.canonicalOriginalImageKey ??
+      (!isHttpUrl(definition.canonicalImageUrl) ? definition.canonicalImageUrl : null) ??
+      null;
+
+    if (storedKey) {
+      return {
+        type: 'stored' as const,
+        bucket: 'canonical' as const,
+        key: storedKey,
+      };
+    }
+
+    if (definition.canonicalImageUrl && isHttpUrl(definition.canonicalImageUrl)) {
+      return {
+        type: 'remote' as const,
+        url: definition.canonicalImageUrl,
+      };
+    }
+
+    return null;
+  }
+
+  private resolveLegacyRemoteImageUrl(source: CardSource) {
+    return source.row.imageUrl && isHttpUrl(source.row.imageUrl) ? source.row.imageUrl : null;
+  }
+}
+
+function isHttpUrl(value: string | null | undefined) {
+  return Boolean(value && (value.startsWith('http://') || value.startsWith('https://')));
 }
