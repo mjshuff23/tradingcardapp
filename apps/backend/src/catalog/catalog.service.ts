@@ -1,30 +1,30 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import type { Express } from 'express';
-import { CatalogDraftInput } from '../common/catalog-normalization.util';
-import { CollectionStatus, Prisma } from '../prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { StorageService } from '../storage/storage.service';
-import { CatalogIndexService } from './catalog-index.service';
-import { CatalogQueryService, CatalogSearchFilters } from './catalog-query.service';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import type { Express } from "express";
+import { CatalogDraftInput } from "../common/catalog-normalization.util";
+import { CollectionStatus, Prisma } from "../prisma/client";
+import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../storage/storage.service";
+import { CatalogIndexService } from "./catalog-index.service";
+import {
+  CatalogQueryService,
+  CatalogSearchFilters,
+} from "./catalog-query.service";
 import {
   CardCollectionRecordDto,
   CardDetailDto,
   CardImageSourceDto,
   CardListItemDto,
-} from './dto/card-response.dto';
+} from "./dto/card-response.dto";
 import {
   CardQueryMode,
   CardSortBy,
   SortDirection,
-} from './dto/list-cards-query.dto';
-import { NormalizeTitleFieldsDto } from './dto/normalize-title.dto';
-import { UpdateCardDto } from './dto/update-card.dto';
-import {
-  NormalizedTitleFields,
-  TitleNormalizationResult,
-  TitleNormalizationService,
-} from './title-normalization.service';
-import { getTaxonomyForResponse } from './card-taxonomy';
+} from "./dto/list-cards-query.dto";
+import { NormalizeTitleFieldsDto } from "./dto/normalize-title.dto";
+import { UpdateCardDto } from "./dto/update-card.dto";
+import type { NormalizedTitleFields } from "./title-normalization.service";
+import { TitleNormalizationService } from "./title-normalization.service";
+import { getTaxonomyForResponse } from "./card-taxonomy";
 
 const userCardInclude = {
   cardDefinition: {
@@ -42,9 +42,13 @@ const userWishlistInclude = {
   },
 } satisfies Prisma.UserWishlistInclude;
 
-type UserCardRow = Prisma.UserCardGetPayload<{ include: typeof userCardInclude }>;
-type UserWishlistRow = Prisma.UserWishlistGetPayload<{ include: typeof userWishlistInclude }>;
-type TransactionReader = Pick<PrismaService, 'userCard' | 'userWishlist'>;
+type UserCardRow = Prisma.UserCardGetPayload<{
+  include: typeof userCardInclude;
+}>;
+type UserWishlistRow = Prisma.UserWishlistGetPayload<{
+  include: typeof userWishlistInclude;
+}>;
+type TransactionReader = Pick<PrismaService, "userCard" | "userWishlist">;
 
 type CardSource =
   | { kind: typeof CollectionStatus.OWNED; row: UserCardRow }
@@ -71,9 +75,16 @@ export class CatalogService {
     sortDirection?: SortDirection;
   }) {
     const page = params.page && params.page > 0 ? params.page : 1;
-    const pageSize = params.pageSize && params.pageSize > 0 ? Math.min(params.pageSize, 100) : 25;
-    const interpreted = this.catalogQueryService.interpret(params.q, params.queryMode);
-    const effectiveStatus = params.collectionStatus ?? interpreted.collectionStatus;
+    const pageSize =
+      params.pageSize && params.pageSize > 0
+        ? Math.min(params.pageSize, 100)
+        : 25;
+    const interpreted = this.catalogQueryService.interpret(
+      params.q,
+      params.queryMode,
+    );
+    const effectiveStatus =
+      params.collectionStatus ?? interpreted.collectionStatus;
 
     const [owned, wanted] = await Promise.all([
       effectiveStatus === CollectionStatus.WANTED
@@ -81,20 +92,24 @@ export class CatalogService {
         : this.prisma.userCard.findMany({
             where: this.buildUserCardWhere(params.userId, interpreted),
             include: userCardInclude,
-            orderBy: { createdAt: 'desc' },
+            orderBy: { createdAt: "desc" },
           }),
       effectiveStatus === CollectionStatus.OWNED
         ? Promise.resolve([] as UserWishlistRow[])
         : this.prisma.userWishlist.findMany({
             where: this.buildUserWishlistWhere(params.userId, interpreted),
             include: userWishlistInclude,
-            orderBy: { createdAt: 'desc' },
+            orderBy: { createdAt: "desc" },
           }),
     ]);
 
     const combined = [
-      ...owned.map((row) => this.toCardListItem({ kind: CollectionStatus.OWNED, row })),
-      ...wanted.map((row) => this.toCardListItem({ kind: CollectionStatus.WANTED, row })),
+      ...owned.map((row) =>
+        this.toCardListItem({ kind: CollectionStatus.OWNED, row }),
+      ),
+      ...wanted.map((row) =>
+        this.toCardListItem({ kind: CollectionStatus.WANTED, row }),
+      ),
     ].sort((left, right) =>
       this.compareCardItems(
         left,
@@ -121,13 +136,16 @@ export class CatalogService {
   async getCard(cardId: number, userId: string): Promise<CardDetailDto> {
     const card = await this.findCardSource(userId, cardId);
     if (!card) {
-      throw new NotFoundException('Card not found.');
+      throw new NotFoundException("Card not found.");
     }
 
     return this.toCardDetail(card);
   }
 
-  async normalizeTitle(rawTitle: string, fields: NormalizeTitleFieldsDto | NormalizedTitleFields = {}) {
+  async normalizeTitle(
+    rawTitle: string,
+    fields: NormalizeTitleFieldsDto | NormalizedTitleFields = {},
+  ) {
     return this.titleNormalizationService.normalize(rawTitle, fields);
   }
 
@@ -135,18 +153,26 @@ export class CatalogService {
     return getTaxonomyForResponse();
   }
 
-  async updateCard(cardId: number, userId: string, dto: UpdateCardDto): Promise<CardDetailDto> {
+  async updateCard(
+    cardId: number,
+    userId: string,
+    dto: UpdateCardDto,
+  ): Promise<CardDetailDto> {
     const current = await this.findCardSource(userId, cardId);
     if (!current) {
-      throw new NotFoundException('Card not found.');
+      throw new NotFoundException("Card not found.");
     }
 
     const nextDraft = this.buildCatalogDraftInput(current, dto);
-    const { cardDefinition } = await this.catalogIndexService.upsertCatalogNodes(nextDraft);
+    const { cardDefinition } =
+      await this.catalogIndexService.upsertCatalogNodes(nextDraft);
     const nextStatus = dto.collectionStatus ?? current.kind;
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      if (current.kind === CollectionStatus.OWNED && nextStatus === CollectionStatus.WANTED) {
+      if (
+        current.kind === CollectionStatus.OWNED &&
+        nextStatus === CollectionStatus.WANTED
+      ) {
         const existingWishlist = await tx.userWishlist.findFirst({
           where: {
             userId: current.row.userId,
@@ -177,16 +203,19 @@ export class CatalogService {
             updatedAt: current.row.updatedAt,
           },
         });
-        await this.syncCardRecordSequence(tx, 'UserWishlist');
+        await this.syncCardRecordSequence(tx, "UserWishlist");
         await tx.userCard.delete({ where: { id: current.row.id } });
-      } else if (current.kind === CollectionStatus.WANTED && nextStatus === CollectionStatus.OWNED) {
+      } else if (
+        current.kind === CollectionStatus.WANTED &&
+        nextStatus === CollectionStatus.OWNED
+      ) {
         const existingOwned = await tx.userCard.findFirst({
           where: {
             userId: current.row.userId,
             cardDefinitionId: cardDefinition.id,
             NOT: { id: current.row.id },
           },
-          orderBy: { id: 'asc' },
+          orderBy: { id: "asc" },
         });
 
         if (existingOwned) {
@@ -200,7 +229,8 @@ export class CatalogService {
             cardDefinitionId: cardDefinition.id,
             condition: dto.condition !== undefined ? dto.condition : null,
             isAutographed: dto.isAutographed ?? false,
-            autographFormat: dto.autographFormat !== undefined ? dto.autographFormat : null,
+            autographFormat:
+              dto.autographFormat !== undefined ? dto.autographFormat : null,
             imageUrl: current.row.imageUrl,
             originalImageKey: current.row.originalImageKey,
             thumbnailImageKey: current.row.thumbnailImageKey,
@@ -212,34 +242,51 @@ export class CatalogService {
               dto.askingPriceCents !== undefined ? dto.askingPriceCents : null,
             notes: dto.notes !== undefined ? dto.notes : current.row.notes,
             gradeEstimate:
-              dto.gradeEstimate !== undefined ? dto.gradeEstimate : current.row.gradeEstimate,
+              dto.gradeEstimate !== undefined
+                ? dto.gradeEstimate
+                : current.row.gradeEstimate,
             confidence: current.row.confidence,
             scanJobId: current.row.scanJobId,
             createdAt: current.row.createdAt,
             updatedAt: current.row.updatedAt,
           },
         });
-        await this.syncCardRecordSequence(tx, 'UserCard');
+        await this.syncCardRecordSequence(tx, "UserCard");
         await tx.userWishlist.delete({ where: { id: current.row.id } });
       } else if (current.kind === CollectionStatus.OWNED) {
         await tx.userCard.update({
           where: { id: current.row.id },
           data: {
             cardDefinitionId: cardDefinition.id,
-            condition: dto.condition !== undefined ? dto.condition : current.row.condition,
+            condition:
+              dto.condition !== undefined
+                ? dto.condition
+                : current.row.condition,
             isAutographed:
-              dto.isAutographed !== undefined ? dto.isAutographed : current.row.isAutographed,
+              dto.isAutographed !== undefined
+                ? dto.isAutographed
+                : current.row.isAutographed,
             autographFormat:
-              dto.autographFormat !== undefined ? dto.autographFormat : current.row.autographFormat,
-            isForTrade: dto.isForTrade !== undefined ? dto.isForTrade : current.row.isForTrade,
-            isForSale: dto.isForSale !== undefined ? dto.isForSale : current.row.isForSale,
+              dto.autographFormat !== undefined
+                ? dto.autographFormat
+                : current.row.autographFormat,
+            isForTrade:
+              dto.isForTrade !== undefined
+                ? dto.isForTrade
+                : current.row.isForTrade,
+            isForSale:
+              dto.isForSale !== undefined
+                ? dto.isForSale
+                : current.row.isForSale,
             askingPriceCents:
               dto.askingPriceCents !== undefined
                 ? dto.askingPriceCents
                 : current.row.askingPriceCents,
             notes: dto.notes !== undefined ? dto.notes : current.row.notes,
             gradeEstimate:
-              dto.gradeEstimate !== undefined ? dto.gradeEstimate : current.row.gradeEstimate,
+              dto.gradeEstimate !== undefined
+                ? dto.gradeEstimate
+                : current.row.gradeEstimate,
           },
         });
       } else {
@@ -247,7 +294,8 @@ export class CatalogService {
           where: { id: current.row.id },
           data: {
             cardDefinitionId: cardDefinition.id,
-            priority: dto.priority !== undefined ? dto.priority : current.row.priority,
+            priority:
+              dto.priority !== undefined ? dto.priority : current.row.priority,
             notes: dto.notes !== undefined ? dto.notes : current.row.notes,
             frontImageKey: current.row.frontImageKey,
             backImageKey: current.row.backImageKey,
@@ -259,7 +307,7 @@ export class CatalogService {
     });
 
     if (!updated) {
-      throw new NotFoundException('Card not found after update.');
+      throw new NotFoundException("Card not found after update.");
     }
 
     return this.toCardDetail(updated);
@@ -269,30 +317,30 @@ export class CatalogService {
     cardId: number,
     userId: string,
   ): Promise<{ buffer: Buffer; contentType: string }> {
-    return this.getCardImageByKind(cardId, userId, 'primary');
+    return this.getCardImageByKind(cardId, userId, "primary");
   }
 
   async getCardImageByKind(
     cardId: number,
     userId: string,
-    kind: 'primary' | 'front' | 'back' | 'canonical',
+    kind: "primary" | "front" | "back" | "canonical",
   ): Promise<{ buffer: Buffer; contentType: string }> {
     const card = await this.findCardSource(userId, cardId);
     if (!card) {
-      throw new NotFoundException('Card not found.');
+      throw new NotFoundException("Card not found.");
     }
 
     const imageTarget = this.resolveImageTarget(card, kind);
 
     if (!imageTarget) {
-      throw new NotFoundException('Card image not found.');
+      throw new NotFoundException("Card image not found.");
     }
 
-    if (imageTarget.type === 'remote') {
+    if (imageTarget.type === "remote") {
       return this.fetchExternalImage(imageTarget.url);
     }
 
-    if (imageTarget.bucket === 'canonical') {
+    if (imageTarget.bucket === "canonical") {
       return this.storageService.readCanonicalCardImage(imageTarget.key);
     }
 
@@ -302,16 +350,19 @@ export class CatalogService {
   async uploadCardImage(
     cardId: number,
     userId: string,
-    kind: 'front' | 'back' | 'canonical',
+    kind: "front" | "back" | "canonical",
     file: Express.Multer.File,
   ): Promise<CardDetailDto> {
     const current = await this.findCardSource(userId, cardId);
     if (!current) {
-      throw new NotFoundException('Card not found.');
+      throw new NotFoundException("Card not found.");
     }
 
-    if (kind === 'canonical') {
-      const stored = await this.storageService.uploadCanonicalCardImage(file.buffer, file.originalname);
+    if (kind === "canonical") {
+      const stored = await this.storageService.uploadCanonicalCardImage(
+        file.buffer,
+        file.originalname,
+      );
       await this.prisma.cardDefinition.update({
         where: { id: current.row.cardDefinition.id },
         data: {
@@ -324,9 +375,12 @@ export class CatalogService {
         },
       });
     } else {
-      const stored = await this.storageService.uploadCardImage(file.buffer, file.originalname);
+      const stored = await this.storageService.uploadCardImage(
+        file.buffer,
+        file.originalname,
+      );
       const commonData =
-        kind === 'front'
+        kind === "front"
           ? {
               imageUrl: stored.thumbnailKey,
               originalImageKey: stored.originalKey,
@@ -352,7 +406,7 @@ export class CatalogService {
 
     const updated = await this.findCardSource(userId, cardId);
     if (!updated) {
-      throw new NotFoundException('Card not found after image update.');
+      throw new NotFoundException("Card not found after image update.");
     }
 
     return this.toCardDetail(updated);
@@ -361,17 +415,21 @@ export class CatalogService {
   async clearCardImage(
     cardId: number,
     userId: string,
-    kind: 'front' | 'back' | 'canonical',
+    kind: "front" | "back" | "canonical",
   ): Promise<CardDetailDto> {
     const current = await this.findCardSource(userId, cardId);
     if (!current) {
-      throw new NotFoundException('Card not found.');
+      throw new NotFoundException("Card not found.");
     }
 
-    if (kind === 'canonical') {
+    if (kind === "canonical") {
       await Promise.all([
-        this.storageService.deleteCardImage(current.row.cardDefinition.canonicalOriginalImageKey),
-        this.storageService.deleteCardImage(current.row.cardDefinition.canonicalThumbnailImageKey),
+        this.storageService.deleteCardImage(
+          current.row.cardDefinition.canonicalOriginalImageKey,
+        ),
+        this.storageService.deleteCardImage(
+          current.row.cardDefinition.canonicalThumbnailImageKey,
+        ),
       ]);
       await this.prisma.cardDefinition.update({
         where: { id: current.row.cardDefinition.id },
@@ -385,7 +443,7 @@ export class CatalogService {
         },
       });
     } else if (current.kind === CollectionStatus.OWNED) {
-      if (kind === 'front') {
+      if (kind === "front") {
         await Promise.all([
           this.storageService.deleteCardImage(current.row.originalImageKey),
           this.storageService.deleteCardImage(current.row.thumbnailImageKey),
@@ -408,7 +466,7 @@ export class CatalogService {
           },
         });
       }
-    } else if (kind === 'front') {
+    } else if (kind === "front") {
       await Promise.all([
         this.storageService.deleteCardImage(current.row.originalImageKey),
         this.storageService.deleteCardImage(current.row.thumbnailImageKey),
@@ -434,13 +492,16 @@ export class CatalogService {
 
     const updated = await this.findCardSource(userId, cardId);
     if (!updated) {
-      throw new NotFoundException('Card not found after image clear.');
+      throw new NotFoundException("Card not found after image clear.");
     }
 
     return this.toCardDetail(updated);
   }
 
-  private buildUserCardWhere(userId: string, filters: CatalogSearchFilters): Prisma.UserCardWhereInput {
+  private buildUserCardWhere(
+    userId: string,
+    filters: CatalogSearchFilters,
+  ): Prisma.UserCardWhereInput {
     const where: Prisma.UserCardWhereInput = {
       userId,
     };
@@ -486,28 +547,28 @@ export class CatalogService {
       const q = filters.searchText.trim();
       clauses.push({
         OR: [
-          { name: { contains: q, mode: 'insensitive' } },
-          { player: { contains: q, mode: 'insensitive' } },
-          { variant: { contains: q, mode: 'insensitive' } },
-          { legacySetText: { contains: q, mode: 'insensitive' } },
-          { cardNumber: { contains: q, mode: 'insensitive' } },
-          { category: { contains: q, mode: 'insensitive' } },
-          { subcategory: { contains: q, mode: 'insensitive' } },
-          { originalOrReprint: { contains: q, mode: 'insensitive' } },
-          { parallelOrVariety: { contains: q, mode: 'insensitive' } },
-          { setType: { contains: q, mode: 'insensitive' } },
-          { insertSetName: { contains: q, mode: 'insensitive' } },
-          { cardType: { contains: q, mode: 'insensitive' } },
+          { name: { contains: q, mode: "insensitive" } },
+          { player: { contains: q, mode: "insensitive" } },
+          { variant: { contains: q, mode: "insensitive" } },
+          { legacySetText: { contains: q, mode: "insensitive" } },
+          { cardNumber: { contains: q, mode: "insensitive" } },
+          { category: { contains: q, mode: "insensitive" } },
+          { subcategory: { contains: q, mode: "insensitive" } },
+          { originalOrReprint: { contains: q, mode: "insensitive" } },
+          { parallelOrVariety: { contains: q, mode: "insensitive" } },
+          { setType: { contains: q, mode: "insensitive" } },
+          { insertSetName: { contains: q, mode: "insensitive" } },
+          { cardType: { contains: q, mode: "insensitive" } },
           {
             cardSet: {
               is: {
                 OR: [
-                  { brand: { contains: q, mode: 'insensitive' } },
-                  { setName: { contains: q, mode: 'insensitive' } },
-                  { season: { contains: q, mode: 'insensitive' } },
-                  { sport: { contains: q, mode: 'insensitive' } },
-                  { language: { contains: q, mode: 'insensitive' } },
-                  { material: { contains: q, mode: 'insensitive' } },
+                  { brand: { contains: q, mode: "insensitive" } },
+                  { setName: { contains: q, mode: "insensitive" } },
+                  { season: { contains: q, mode: "insensitive" } },
+                  { sport: { contains: q, mode: "insensitive" } },
+                  { language: { contains: q, mode: "insensitive" } },
+                  { material: { contains: q, mode: "insensitive" } },
                 ],
               },
             },
@@ -520,7 +581,7 @@ export class CatalogService {
       clauses.push({
         cardNumber: {
           contains: filters.cardNumber,
-          mode: 'insensitive',
+          mode: "insensitive",
         },
       });
     }
@@ -531,7 +592,7 @@ export class CatalogService {
           is: {
             brand: {
               contains: filters.brand,
-              mode: 'insensitive',
+              mode: "insensitive",
             },
           },
         },
@@ -546,13 +607,13 @@ export class CatalogService {
               {
                 setName: {
                   contains: filters.setName,
-                  mode: 'insensitive',
+                  mode: "insensitive",
                 },
               },
               {
                 brand: {
                   contains: filters.setName,
-                  mode: 'insensitive',
+                  mode: "insensitive",
                 },
               },
             ],
@@ -567,7 +628,7 @@ export class CatalogService {
           is: {
             season: {
               contains: filters.season,
-              mode: 'insensitive',
+              mode: "insensitive",
             },
           },
         },
@@ -590,7 +651,7 @@ export class CatalogService {
           is: {
             sport: {
               equals: filters.sport,
-              mode: 'insensitive',
+              mode: "insensitive",
             },
           },
         },
@@ -610,7 +671,10 @@ export class CatalogService {
     return clauses.length === 1 ? clauses[0] : { AND: clauses };
   }
 
-  private async findCardSource(userId: string, cardId: number): Promise<CardSource | null> {
+  private async findCardSource(
+    userId: string,
+    cardId: number,
+  ): Promise<CardSource | null> {
     return this.findCardSourceWithin(this.prisma, userId, cardId);
   }
 
@@ -641,24 +705,39 @@ export class CatalogService {
     return null;
   }
 
-  private buildCatalogDraftInput(source: CardSource, dto: UpdateCardDto): CatalogDraftInput {
+  private buildCatalogDraftInput(
+    source: CardSource,
+    dto: UpdateCardDto,
+  ): CatalogDraftInput {
     const definition = source.row.cardDefinition;
     const cardSet = definition.cardSet;
 
     return {
       name: dto.name ?? definition.name,
-      brand: dto.brand !== undefined ? dto.brand : cardSet?.brand ?? null,
-      set: dto.legacySetText !== undefined ? dto.legacySetText : definition.legacySetText,
-      setName: dto.setName !== undefined ? dto.setName : cardSet?.setName ?? definition.legacySetText,
+      brand: dto.brand !== undefined ? dto.brand : (cardSet?.brand ?? null),
+      set:
+        dto.legacySetText !== undefined
+          ? dto.legacySetText
+          : definition.legacySetText,
+      setName:
+        dto.setName !== undefined
+          ? dto.setName
+          : (cardSet?.setName ?? definition.legacySetText),
       yearManufactured:
-        dto.yearManufactured !== undefined ? dto.yearManufactured : cardSet?.yearManufactured ?? null,
+        dto.yearManufactured !== undefined
+          ? dto.yearManufactured
+          : (cardSet?.yearManufactured ?? null),
       player: dto.player !== undefined ? dto.player : definition.player,
       variant: dto.variant !== undefined ? dto.variant : definition.variant,
-      sport: dto.sport !== undefined ? dto.sport : cardSet?.sport ?? null,
-      season: dto.season !== undefined ? dto.season : cardSet?.season ?? null,
-      cardNumber: dto.cardNumber !== undefined ? dto.cardNumber : definition.cardNumber,
+      sport: dto.sport !== undefined ? dto.sport : (cardSet?.sport ?? null),
+      season: dto.season !== undefined ? dto.season : (cardSet?.season ?? null),
+      cardNumber:
+        dto.cardNumber !== undefined ? dto.cardNumber : definition.cardNumber,
       category: dto.category !== undefined ? dto.category : definition.category,
-      subcategory: dto.subcategory !== undefined ? dto.subcategory : definition.subcategory,
+      subcategory:
+        dto.subcategory !== undefined
+          ? dto.subcategory
+          : definition.subcategory,
       hasAutographVariant:
         dto.hasAutographVariant !== undefined
           ? dto.hasAutographVariant
@@ -673,9 +752,12 @@ export class CatalogService {
           : definition.parallelOrVariety,
       setType: dto.setType !== undefined ? dto.setType : definition.setType,
       insertSetName:
-        dto.insertSetName !== undefined ? dto.insertSetName : definition.insertSetName,
+        dto.insertSetName !== undefined
+          ? dto.insertSetName
+          : definition.insertSetName,
       cardType: dto.cardType !== undefined ? dto.cardType : definition.cardType,
-      isVintage: dto.isVintage !== undefined ? dto.isVintage : definition.isVintage,
+      isVintage:
+        dto.isVintage !== undefined ? dto.isVintage : definition.isVintage,
     };
   }
 
@@ -688,7 +770,7 @@ export class CatalogService {
       definition.name,
     ]
       .filter(Boolean)
-      .join(' · ');
+      .join(" · ");
     const subtitleParts = [
       cardSet?.brand,
       cardSet?.setName ?? definition.legacySetText,
@@ -701,7 +783,7 @@ export class CatalogService {
     return {
       id: source.row.id,
       title,
-      subtitle: subtitleParts.join(' · '),
+      subtitle: subtitleParts.join(" · "),
       imageUrl: imageMeta.imageUrl,
       imageSource: imageMeta.imageSource,
       canonicalImageUrl: imageMeta.canonicalImageUrl,
@@ -720,14 +802,16 @@ export class CatalogService {
         category: definition.category,
         subcategory: definition.subcategory,
         hasAutographVariant: definition.hasAutographVariant,
-        features: (definition.features as Record<string, unknown> | null) ?? null,
+        features:
+          (definition.features as Record<string, unknown> | null) ?? null,
         originalOrReprint: definition.originalOrReprint,
         parallelOrVariety: definition.parallelOrVariety,
         setType: definition.setType,
         insertSetName: definition.insertSetName,
         cardType: definition.cardType,
         isVintage: definition.isVintage,
-        metadata: (definition.metadata as Record<string, unknown> | null) ?? null,
+        metadata:
+          (definition.metadata as Record<string, unknown> | null) ?? null,
         cardSet: cardSet
           ? {
               id: cardSet.id,
@@ -742,7 +826,8 @@ export class CatalogService {
               countryOfOrigin: cardSet.countryOfOrigin,
               language: cardSet.language,
               material: cardSet.material,
-              metadata: (cardSet.metadata as Record<string, unknown> | null) ?? null,
+              metadata:
+                (cardSet.metadata as Record<string, unknown> | null) ?? null,
             }
           : null,
       },
@@ -780,7 +865,11 @@ export class CatalogService {
       return updatedTieBreak;
     }
 
-    const titleTieBreak = this.compareSortValues(left.title, right.title, SortDirection.ASC);
+    const titleTieBreak = this.compareSortValues(
+      left.title,
+      right.title,
+      SortDirection.ASC,
+    );
     if (titleTieBreak !== 0) {
       return titleTieBreak;
     }
@@ -788,7 +877,10 @@ export class CatalogService {
     return left.id - right.id;
   }
 
-  private readSortValue(card: CardListItemDto, sortBy: CardSortBy): string | number | boolean | Date | null {
+  private readSortValue(
+    card: CardListItemDto,
+    sortBy: CardSortBy,
+  ): string | number | boolean | Date | null {
     switch (sortBy) {
       case CardSortBy.TITLE:
         return card.title;
@@ -797,7 +889,9 @@ export class CatalogService {
       case CardSortBy.BRAND:
         return card.definition.cardSet?.brand ?? null;
       case CardSortBy.SET_NAME:
-        return card.definition.cardSet?.setName ?? card.definition.legacySetText;
+        return (
+          card.definition.cardSet?.setName ?? card.definition.legacySetText
+        );
       case CardSortBy.YEAR_MANUFACTURED:
         return card.definition.cardSet?.yearManufactured ?? null;
       case CardSortBy.SEASON:
@@ -845,9 +939,13 @@ export class CatalogService {
     direction: SortDirection,
   ) {
     const leftEmpty =
-      left === null || left === undefined || (typeof left === 'string' && !left.trim());
+      left === null ||
+      left === undefined ||
+      (typeof left === "string" && !left.trim());
     const rightEmpty =
-      right === null || right === undefined || (typeof right === 'string' && !right.trim());
+      right === null ||
+      right === undefined ||
+      (typeof right === "string" && !right.trim());
 
     if (leftEmpty && rightEmpty) {
       return 0;
@@ -865,14 +963,14 @@ export class CatalogService {
 
     if (left instanceof Date && right instanceof Date) {
       compared = left.getTime() - right.getTime();
-    } else if (typeof left === 'boolean' && typeof right === 'boolean') {
+    } else if (typeof left === "boolean" && typeof right === "boolean") {
       compared = Number(left) - Number(right);
-    } else if (typeof left === 'number' && typeof right === 'number') {
+    } else if (typeof left === "number" && typeof right === "number") {
       compared = left - right;
     } else {
       compared = String(left).localeCompare(String(right), undefined, {
         numeric: true,
-        sensitivity: 'base',
+        sensitivity: "base",
       });
     }
 
@@ -885,7 +983,7 @@ export class CatalogService {
 
   private async syncCardRecordSequence(
     tx: Prisma.TransactionClient,
-    table: 'UserCard' | 'UserWishlist',
+    table: "UserCard" | "UserWishlist",
   ) {
     const quotedTable = `"${table}"`;
     await tx.$executeRawUnsafe(
@@ -893,7 +991,9 @@ export class CatalogService {
     );
   }
 
-  private async fetchExternalImage(url: string): Promise<{ buffer: Buffer; contentType: string }> {
+  private async fetchExternalImage(
+    url: string,
+  ): Promise<{ buffer: Buffer; contentType: string }> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
@@ -901,23 +1001,23 @@ export class CatalogService {
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
-          'User-Agent':
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36',
+          "User-Agent":
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
         },
       });
 
       if (!response.ok) {
-        throw new NotFoundException('Card image fetch failed.');
+        throw new NotFoundException("Card image fetch failed.");
       }
 
-      const contentType = response.headers.get('content-type') ?? 'image/jpeg';
+      const contentType = response.headers.get("content-type") ?? "image/jpeg";
       const bytes = await response.arrayBuffer();
       return {
         buffer: Buffer.from(bytes),
         contentType,
       };
     } catch {
-      throw new NotFoundException('Card image not reachable.');
+      throw new NotFoundException("Card image not reachable.");
     } finally {
       clearTimeout(timeoutId);
     }
@@ -925,7 +1025,7 @@ export class CatalogService {
 
   private toCardCollectionRecord(
     source: CardSource,
-    imageMeta: ReturnType<CatalogService['resolveCardImageMeta']>,
+    imageMeta: ReturnType<CatalogService["resolveCardImageMeta"]>,
   ): CardCollectionRecordDto {
     if (source.kind === CollectionStatus.OWNED) {
       return {
@@ -976,7 +1076,9 @@ export class CatalogService {
     const legacyImageUrl = this.resolveLegacyRemoteImageUrl(source);
     const backImageTarget = this.resolveBackImageTarget(source);
 
-    const hasPrimaryImage = Boolean(personalImageKey || canonicalImageTarget || legacyImageUrl);
+    const hasPrimaryImage = Boolean(
+      personalImageKey || canonicalImageTarget || legacyImageUrl,
+    );
     const imageSource = personalImageKey
       ? CardImageSourceDto.USER
       : canonicalImageTarget
@@ -986,14 +1088,22 @@ export class CatalogService {
           : CardImageSourceDto.NONE;
 
     return {
-      imageUrl: hasPrimaryImage ? this.buildCardImageUrl(source.row.id, 'image') : null,
+      imageUrl: hasPrimaryImage
+        ? this.buildCardImageUrl(source.row.id, "image")
+        : null,
       imageSource,
       canonicalImageUrl: canonicalImageTarget
-        ? this.buildCardImageUrl(source.row.id, 'images/canonical')
+        ? this.buildCardImageUrl(source.row.id, "images/canonical")
         : null,
-      personalImageUrl: personalImageKey ? this.buildCardImageUrl(source.row.id, 'images/front') : null,
-      frontImageUrl: personalImageKey ? this.buildCardImageUrl(source.row.id, 'images/front') : null,
-      backImageUrl: backImageTarget ? this.buildCardImageUrl(source.row.id, 'images/back') : null,
+      personalImageUrl: personalImageKey
+        ? this.buildCardImageUrl(source.row.id, "images/front")
+        : null,
+      frontImageUrl: personalImageKey
+        ? this.buildCardImageUrl(source.row.id, "images/front")
+        : null,
+      backImageUrl: backImageTarget
+        ? this.buildCardImageUrl(source.row.id, "images/back")
+        : null,
     };
   }
 
@@ -1001,21 +1111,24 @@ export class CatalogService {
     return `/api/v1/cards/${cardId}/${suffix}`;
   }
 
-  private resolveImageTarget(source: CardSource, kind: 'primary' | 'front' | 'back' | 'canonical') {
-    if (kind === 'canonical') {
+  private resolveImageTarget(
+    source: CardSource,
+    kind: "primary" | "front" | "back" | "canonical",
+  ) {
+    if (kind === "canonical") {
       return this.resolveCanonicalImageTarget(source);
     }
 
-    if (kind === 'back') {
+    if (kind === "back") {
       return this.resolveBackImageTarget(source);
     }
 
-    if (kind === 'front') {
+    if (kind === "front") {
       const personalImageKey = this.resolvePersonalStoredImageKey(source);
       return personalImageKey
         ? {
-            type: 'stored' as const,
-            bucket: 'card' as const,
+            type: "stored" as const,
+            bucket: "card" as const,
             key: personalImageKey,
           }
         : null;
@@ -1024,8 +1137,8 @@ export class CatalogService {
     const personalImageKey = this.resolvePersonalStoredImageKey(source);
     if (personalImageKey) {
       return {
-        type: 'stored' as const,
-        bucket: 'card' as const,
+        type: "stored" as const,
+        bucket: "card" as const,
         key: personalImageKey,
       };
     }
@@ -1038,7 +1151,7 @@ export class CatalogService {
     const legacyImageUrl = this.resolveLegacyRemoteImageUrl(source);
     if (legacyImageUrl) {
       return {
-        type: 'remote' as const,
+        type: "remote" as const,
         url: legacyImageUrl,
       };
     }
@@ -1064,8 +1177,8 @@ export class CatalogService {
     }
 
     return {
-      type: isHttpUrl(backImageKey) ? ('remote' as const) : ('stored' as const),
-      bucket: 'card' as const,
+      type: isHttpUrl(backImageKey) ? ("remote" as const) : ("stored" as const),
+      bucket: "card" as const,
       key: backImageKey,
       url: backImageKey,
     };
@@ -1076,20 +1189,25 @@ export class CatalogService {
     const storedKey =
       definition.canonicalThumbnailImageKey ??
       definition.canonicalOriginalImageKey ??
-      (!isHttpUrl(definition.canonicalImageUrl) ? definition.canonicalImageUrl : null) ??
+      (!isHttpUrl(definition.canonicalImageUrl)
+        ? definition.canonicalImageUrl
+        : null) ??
       null;
 
     if (storedKey) {
       return {
-        type: 'stored' as const,
-        bucket: 'canonical' as const,
+        type: "stored" as const,
+        bucket: "canonical" as const,
         key: storedKey,
       };
     }
 
-    if (definition.canonicalImageUrl && isHttpUrl(definition.canonicalImageUrl)) {
+    if (
+      definition.canonicalImageUrl &&
+      isHttpUrl(definition.canonicalImageUrl)
+    ) {
       return {
-        type: 'remote' as const,
+        type: "remote" as const,
         url: definition.canonicalImageUrl,
       };
     }
@@ -1098,10 +1216,14 @@ export class CatalogService {
   }
 
   private resolveLegacyRemoteImageUrl(source: CardSource) {
-    return source.row.imageUrl && isHttpUrl(source.row.imageUrl) ? source.row.imageUrl : null;
+    return source.row.imageUrl && isHttpUrl(source.row.imageUrl)
+      ? source.row.imageUrl
+      : null;
   }
 }
 
 function isHttpUrl(value: string | null | undefined) {
-  return Boolean(value && (value.startsWith('http://') || value.startsWith('https://')));
+  return Boolean(
+    value && (value.startsWith("http://") || value.startsWith("https://")),
+  );
 }
