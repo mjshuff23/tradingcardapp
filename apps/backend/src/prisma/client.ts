@@ -4,7 +4,7 @@ export {
   Prisma,
   PrismaClient,
   ScanStatus,
-} from '../generated/prisma/client';
+} from "../generated/prisma/client";
 
 export type {
   CardDefinition,
@@ -16,4 +16,4 @@ export type {
   User,
   UserCard,
   UserWishlist,
-} from '../generated/prisma/client';
+} from "../generated/prisma/client";

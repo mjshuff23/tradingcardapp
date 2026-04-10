@@ -1,7 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsOptional, ValidateNested } from 'class-validator';
-import { ConfirmScanDraftDto } from './confirm-scan.dto';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
+import { IsOptional, ValidateNested } from "class-validator";
+import { ConfirmScanDraftDto } from "./confirm-scan.dto";
 
 export class EnrichScanCandidateRequestDto {
   @ApiPropertyOptional({ type: ConfirmScanDraftDto })
@@ -32,10 +32,10 @@ export class EnrichmentSourceDto {
 }
 
 export class EnrichScanCandidateResponseDto {
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ type: "object", additionalProperties: true })
   fields!: Record<string, unknown>;
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ type: "object", additionalProperties: true })
   fieldConfidence!: Record<string, number>;
 
   @ApiProperty()
@@ -53,6 +53,10 @@ export class EnrichScanCandidateResponseDto {
   @ApiProperty({ type: [EnrichmentSourceDto] })
   sources!: EnrichmentSourceDto[];
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true, nullable: true })
+  @ApiPropertyOptional({
+    type: "object",
+    additionalProperties: true,
+    nullable: true,
+  })
   debug!: Record<string, unknown> | null;
 }

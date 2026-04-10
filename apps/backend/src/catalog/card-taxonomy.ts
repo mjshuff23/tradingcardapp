@@ -1,4 +1,4 @@
-import { normalizeText } from '../common/normalize.util';
+import { normalizeText } from "../common/normalize.util";
 
 export type CardTaxonomyGroup = {
   category: string;
@@ -11,55 +11,70 @@ export type CardTaxonomyGroup = {
 
 export const CARD_TAXONOMY: CardTaxonomyGroup[] = [
   {
-    category: 'Sports',
-    keywords: ['sports', 'sport'],
+    category: "Sports",
+    keywords: ["sports", "sport"],
     subcategories: [
-      { name: 'Basketball', keywords: ['basketball', 'nba', 'wnba', 'bulls', 'lakers'] },
-      { name: 'Football', keywords: ['football', 'nfl', 'super bowl'] },
-      { name: 'Baseball', keywords: ['baseball', 'mlb'] },
-      { name: 'Soccer', keywords: ['soccer', 'futbol', 'fifa'] },
-      { name: 'Hockey', keywords: ['hockey', 'nhl'] },
-      { name: 'Golf', keywords: ['golf', 'pga'] },
-      { name: 'Racing', keywords: ['racing', 'nascar', 'formula 1', 'f1'] },
-      { name: 'Wrestling', keywords: ['wrestling', 'wwe', 'wwf', 'wcw'] },
-      { name: 'MMA', keywords: ['mma', 'ufc', 'bellator'] },
-      { name: 'Multi-sport', keywords: ['multi sport', 'multi-sport'] },
+      {
+        name: "Basketball",
+        keywords: ["basketball", "nba", "wnba", "bulls", "lakers"],
+      },
+      { name: "Football", keywords: ["football", "nfl", "super bowl"] },
+      { name: "Baseball", keywords: ["baseball", "mlb"] },
+      { name: "Soccer", keywords: ["soccer", "futbol", "fifa"] },
+      { name: "Hockey", keywords: ["hockey", "nhl"] },
+      { name: "Golf", keywords: ["golf", "pga"] },
+      { name: "Racing", keywords: ["racing", "nascar", "formula 1", "f1"] },
+      { name: "Wrestling", keywords: ["wrestling", "wwe", "wwf", "wcw"] },
+      { name: "MMA", keywords: ["mma", "ufc", "bellator"] },
+      { name: "Multi-sport", keywords: ["multi sport", "multi-sport"] },
     ],
   },
   {
-    category: 'Entertainment',
-    keywords: ['entertainment', 'celebrity'],
+    category: "Entertainment",
+    keywords: ["entertainment", "celebrity"],
     subcategories: [
-      { name: 'Films', keywords: ['film', 'films', 'movie', 'movies', 'cinema'] },
-      { name: 'TV Series', keywords: ['tv', 'television', 'series', 'sitcom', 'show'] },
-      { name: 'Anime', keywords: ['anime', 'manga'] },
-      { name: 'Reality', keywords: ['reality', 'reality tv'] },
-      { name: 'Comics', keywords: ['comic', 'comics', 'marvel', 'dc'] },
-      { name: 'Music', keywords: ['music', 'band', 'singer', 'album'] },
-      { name: 'Other', keywords: ['entertainment other'] },
+      {
+        name: "Films",
+        keywords: ["film", "films", "movie", "movies", "cinema"],
+      },
+      {
+        name: "TV Series",
+        keywords: ["tv", "television", "series", "sitcom", "show"],
+      },
+      { name: "Anime", keywords: ["anime", "manga"] },
+      { name: "Reality", keywords: ["reality", "reality tv"] },
+      { name: "Comics", keywords: ["comic", "comics", "marvel", "dc"] },
+      { name: "Music", keywords: ["music", "band", "singer", "album"] },
+      { name: "Other", keywords: ["entertainment other"] },
     ],
   },
   {
-    category: 'Gaming/TCG',
-    keywords: ['game', 'gaming', 'tcg', 'trading card game'],
+    category: "Gaming/TCG",
+    keywords: ["game", "gaming", "tcg", "trading card game"],
     subcategories: [
-      { name: 'Pokemon', keywords: ['pokemon', 'pikachu'] },
-      { name: 'Magic: The Gathering', keywords: ['magic the gathering', 'mtg'] },
-      { name: 'Yu-Gi-Oh!', keywords: ['yu gi oh', 'yugioh'] },
-      { name: 'Dragon Ball', keywords: ['dragon ball', 'dragon ball z', 'dbz'] },
-      { name: 'One Piece', keywords: ['one piece'] },
-      { name: 'Digimon', keywords: ['digimon'] },
-      { name: 'Lorcana', keywords: ['lorcana'] },
-      { name: 'Other', keywords: ['gaming other', 'tcg other'] },
+      { name: "Pokemon", keywords: ["pokemon", "pikachu"] },
+      {
+        name: "Magic: The Gathering",
+        keywords: ["magic the gathering", "mtg"],
+      },
+      { name: "Yu-Gi-Oh!", keywords: ["yu gi oh", "yugioh"] },
+      {
+        name: "Dragon Ball",
+        keywords: ["dragon ball", "dragon ball z", "dbz"],
+      },
+      { name: "One Piece", keywords: ["one piece"] },
+      { name: "Digimon", keywords: ["digimon"] },
+      { name: "Lorcana", keywords: ["lorcana"] },
+      { name: "Other", keywords: ["gaming other", "tcg other"] },
     ],
   },
   {
-    category: 'Other',
-    keywords: ['other', 'misc'],
+    category: "Other",
+    keywords: ["other", "misc"],
     subcategories: [
-      { name: 'Historical', keywords: ['historical', 'history'] },
-      { name: 'Non-sports', keywords: ['non sports', 'non-sports'] },
-      { name: 'Miscellaneous', keywords: ['misc', 'miscellaneous'] },
+      { name: "Historical", keywords: ["historical", "history"] },
+      { name: "Non-sports", keywords: ["non sports", "non-sports"] },
+      { name: "Miscellaneous", keywords: ["misc", "miscellaneous"] },
     ],
   },
 ];
@@ -86,12 +101,14 @@ export function inferTaxonomyFromText(
 
   if (normalizedSport) {
     const sportMatch = CARD_TAXONOMY[0].subcategories.find((subcategory) =>
-      subcategory.keywords.some((keyword) => normalizeText(keyword) === normalizedSport),
+      subcategory.keywords.some(
+        (keyword) => normalizeText(keyword) === normalizedSport,
+      ),
     );
 
     if (sportMatch) {
       return {
-        category: 'Sports',
+        category: "Sports",
         subcategory: sportMatch.name,
       };
     }
@@ -99,7 +116,9 @@ export function inferTaxonomyFromText(
 
   for (const group of CARD_TAXONOMY) {
     const subcategoryMatch = group.subcategories.find((subcategory) =>
-      subcategory.keywords.some((keyword) => normalized.includes(normalizeText(keyword))),
+      subcategory.keywords.some((keyword) =>
+        normalized.includes(normalizeText(keyword)),
+      ),
     );
 
     if (subcategoryMatch) {
@@ -109,7 +128,11 @@ export function inferTaxonomyFromText(
       };
     }
 
-    if (group.keywords.some((keyword) => normalized.includes(normalizeText(keyword)))) {
+    if (
+      group.keywords.some((keyword) =>
+        normalized.includes(normalizeText(keyword)),
+      )
+    ) {
       return {
         category: group.category,
         subcategory: null,
@@ -123,10 +146,14 @@ export function inferTaxonomyFromText(
   };
 }
 
-export function getSubcategoriesForCategory(category: string | null | undefined): string[] {
+export function getSubcategoriesForCategory(
+  category: string | null | undefined,
+): string[] {
   const match = CARD_TAXONOMY.find(
     (group) => normalizeText(group.category) === normalizeText(category),
   );
 
-  return match ? match.subcategories.map((subcategory) => subcategory.name) : [];
+  return match
+    ? match.subcategories.map((subcategory) => subcategory.name)
+    : [];
 }

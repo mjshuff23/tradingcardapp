@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 import {
   IsBoolean,
   IsInt,
@@ -8,8 +8,8 @@ import {
   IsString,
   Max,
   Min,
-} from 'class-validator';
-import { CollectionStatus } from '../../prisma/client';
+} from "class-validator";
+import { CollectionStatus } from "../../prisma/client";
 
 export class NormalizeTitleSearchDto {
   @ApiPropertyOptional()
@@ -146,7 +146,7 @@ export class NormalizeTitleResultDto {
   @ApiProperty({ type: NormalizeTitleFieldsDto })
   fields!: NormalizeTitleFieldsDto;
 
-  @ApiProperty({ type: 'object', additionalProperties: { type: 'number' } })
+  @ApiProperty({ type: "object", additionalProperties: { type: "number" } })
   fieldConfidence!: Record<string, number>;
 
   @ApiProperty()
@@ -161,7 +161,11 @@ export class NormalizeTitleResultDto {
   @ApiProperty({ type: [String] })
   changedFields!: string[];
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true, nullable: true })
+  @ApiPropertyOptional({
+    type: "object",
+    additionalProperties: true,
+    nullable: true,
+  })
   @IsOptional()
   @IsObject()
   debug?: Record<string, unknown> | null;

@@ -1,15 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
-} from '@aws-sdk/client-s3';
-import { randomUUID } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import sharp from 'sharp';
+} from "@aws-sdk/client-s3";
+import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import sharp from "sharp";
 
 export type StoredImage = {
   originalKey: string;
@@ -21,7 +21,7 @@ export type StoredImageContent = {
   contentType: string;
 };
 
-type StorageTarget = 'card' | 'profile';
+type StorageTarget = "card" | "profile";
 
 @Injectable()
 export class StorageService {
@@ -31,15 +31,18 @@ export class StorageService {
   private readonly cardBucket: string;
 
   constructor(private readonly configService: ConfigService) {
-    const endpoint = this.configService.get<string>('S3_ENDPOINT') ?? undefined;
-    const region = this.configService.get<string>('S3_REGION') ?? 'garage';
-    const accessKeyId = this.configService.get<string>('S3_ACCESS_KEY') ?? 'tradingcards';
-    const secretAccessKey = this.configService.get<string>('S3_SECRET_KEY') ?? 'tradingcardssecret';
-    const defaultBucket = this.configService.get<string>('S3_BUCKET') ?? 'trading-cards';
+    const endpoint = this.configService.get<string>("S3_ENDPOINT") ?? undefined;
+    const region = this.configService.get<string>("S3_REGION") ?? "garage";
+    const accessKeyId =
+      this.configService.get<string>("S3_ACCESS_KEY") ?? "tradingcards";
+    const secretAccessKey =
+      this.configService.get<string>("S3_SECRET_KEY") ?? "tradingcardssecret";
+    const defaultBucket =
+      this.configService.get<string>("S3_BUCKET") ?? "trading-cards";
     this.profileBucket =
-      this.configService.get<string>('S3_PROFILE_BUCKET') ?? defaultBucket;
+      this.configService.get<string>("S3_PROFILE_BUCKET") ?? defaultBucket;
     this.cardBucket =
-      this.configService.get<string>('S3_CARD_BUCKET') ?? defaultBucket;
+      this.configService.get<string>("S3_CARD_BUCKET") ?? defaultBucket;
 
     this.s3Client = new S3Client({
       endpoint,
@@ -52,64 +55,76 @@ export class StorageService {
     });
   }
 
-  async uploadScanImage(buffer: Buffer, sourceFilename: string): Promise<StoredImage> {
+  async uploadScanImage(
+    buffer: Buffer,
+    sourceFilename: string,
+  ): Promise<StoredImage> {
     return this.uploadImageToBucket({
       buffer,
       sourceFilename,
-      target: 'card',
-      keyPrefix: 'user-cards/scans',
+      target: "card",
+      keyPrefix: "user-cards/scans",
     });
   }
 
-  async uploadCardImage(buffer: Buffer, sourceFilename: string): Promise<StoredImage> {
+  async uploadCardImage(
+    buffer: Buffer,
+    sourceFilename: string,
+  ): Promise<StoredImage> {
     return this.uploadImageToBucket({
       buffer,
       sourceFilename,
-      target: 'card',
-      keyPrefix: 'user-cards/catalog',
+      target: "card",
+      keyPrefix: "user-cards/catalog",
     });
   }
 
-  async uploadCanonicalCardImage(buffer: Buffer, sourceFilename: string): Promise<StoredImage> {
+  async uploadCanonicalCardImage(
+    buffer: Buffer,
+    sourceFilename: string,
+  ): Promise<StoredImage> {
     return this.uploadImageToBucket({
       buffer,
       sourceFilename,
-      target: 'card',
-      keyPrefix: 'canonical-cards',
+      target: "card",
+      keyPrefix: "canonical-cards",
     });
   }
 
-  async uploadProfileImage(buffer: Buffer, sourceFilename: string): Promise<StoredImage> {
+  async uploadProfileImage(
+    buffer: Buffer,
+    sourceFilename: string,
+  ): Promise<StoredImage> {
     return this.uploadImageToBucket({
       buffer,
       sourceFilename,
-      target: 'profile',
-      keyPrefix: 'profiles',
+      target: "profile",
+      keyPrefix: "profiles",
     });
   }
 
   async readImage(key: string): Promise<StoredImageContent> {
-    return this.readStoredImage(key, 'card');
+    return this.readStoredImage(key, "card");
   }
 
   async readCardImage(key: string): Promise<StoredImageContent> {
-    return this.readStoredImage(key, 'card');
+    return this.readStoredImage(key, "card");
   }
 
   async readProfileImage(key: string): Promise<StoredImageContent> {
-    return this.readStoredImage(key, 'profile');
+    return this.readStoredImage(key, "profile");
   }
 
   async readCanonicalCardImage(key: string): Promise<StoredImageContent> {
-    return this.readStoredImage(key, 'card');
+    return this.readStoredImage(key, "card");
   }
 
   async deleteCardImage(key: string | null | undefined) {
-    await this.deleteStoredImage(key, 'card');
+    await this.deleteStoredImage(key, "card");
   }
 
   async deleteProfileImage(key: string | null | undefined) {
-    await this.deleteStoredImage(key, 'profile');
+    await this.deleteStoredImage(key, "profile");
   }
 
   private async uploadImageToBucket(input: {
@@ -125,7 +140,12 @@ export class StorageService {
     const bucket = this.resolveBucket(input.target);
 
     const thumbnailBuffer = await sharp(input.buffer)
-      .resize({ width: 600, height: 600, fit: 'inside', withoutEnlargement: true })
+      .resize({
+        width: 600,
+        height: 600,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
       .jpeg({ quality: 80 })
       .toBuffer();
 
@@ -144,7 +164,7 @@ export class StorageService {
             Bucket: bucket,
             Key: thumbnailKey,
             Body: thumbnailBuffer,
-            ContentType: 'image/jpeg',
+            ContentType: "image/jpeg",
           }),
         ),
       ]);
@@ -152,8 +172,16 @@ export class StorageService {
       return { originalKey, thumbnailKey };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`Falling back to local image storage because S3 upload failed: ${message}`);
-      return this.writeLocally(input.keyPrefix, id, extension, input.buffer, thumbnailBuffer);
+      this.logger.warn(
+        `Falling back to local image storage because S3 upload failed: ${message}`,
+      );
+      return this.writeLocally(
+        input.keyPrefix,
+        id,
+        extension,
+        input.buffer,
+        thumbnailBuffer,
+      );
     }
   }
 
@@ -162,15 +190,15 @@ export class StorageService {
     target: StorageTarget,
   ): Promise<StoredImageContent> {
     if (!key) {
-      throw new Error('Image key is required.');
+      throw new Error("Image key is required.");
     }
 
-    if (key.startsWith('local/')) {
-      const localRoot = path.resolve(process.cwd(), '.local-storage');
-      const relativePath = key.replace(/^local\//, '');
+    if (key.startsWith("local/")) {
+      const localRoot = path.resolve(process.cwd(), ".local-storage");
+      const relativePath = key.replace(/^local\//, "");
       const filePath = path.join(localRoot, relativePath);
       const buffer = await fs.readFile(filePath);
-      const extension = path.extname(filePath).replace('.', '').toLowerCase();
+      const extension = path.extname(filePath).replace(".", "").toLowerCase();
       return {
         buffer,
         contentType: this.detectMimeType(extension),
@@ -185,28 +213,31 @@ export class StorageService {
     );
 
     if (!response.Body) {
-      throw new Error('Image object not found.');
+      throw new Error("Image object not found.");
     }
 
     const bytes = await response.Body.transformToByteArray();
     return {
       buffer: Buffer.from(bytes),
-      contentType: response.ContentType ?? 'application/octet-stream',
+      contentType: response.ContentType ?? "application/octet-stream",
     };
   }
 
-  private async deleteStoredImage(key: string | null | undefined, target: StorageTarget) {
+  private async deleteStoredImage(
+    key: string | null | undefined,
+    target: StorageTarget,
+  ) {
     if (!key) {
       return;
     }
 
-    if (key.startsWith('http://') || key.startsWith('https://')) {
+    if (key.startsWith("http://") || key.startsWith("https://")) {
       return;
     }
 
-    if (key.startsWith('local/')) {
-      const localRoot = path.resolve(process.cwd(), '.local-storage');
-      const relativePath = key.replace(/^local\//, '');
+    if (key.startsWith("local/")) {
+      const localRoot = path.resolve(process.cwd(), ".local-storage");
+      const relativePath = key.replace(/^local\//, "");
       const filePath = path.join(localRoot, relativePath);
       await fs.rm(filePath, { force: true });
       return;
@@ -221,32 +252,35 @@ export class StorageService {
   }
 
   private resolveBucket(target: StorageTarget) {
-    return target === 'profile' ? this.profileBucket : this.cardBucket;
+    return target === "profile" ? this.profileBucket : this.cardBucket;
   }
 
   private getExtension(sourceFilename: string): string {
-    const extension = path.extname(sourceFilename).replace('.', '').toLowerCase();
+    const extension = path
+      .extname(sourceFilename)
+      .replace(".", "")
+      .toLowerCase();
     if (!extension) {
-      return 'jpg';
+      return "jpg";
     }
 
-    if (['jpg', 'jpeg', 'png', 'webp'].includes(extension)) {
+    if (["jpg", "jpeg", "png", "webp"].includes(extension)) {
       return extension;
     }
 
-    return 'jpg';
+    return "jpg";
   }
 
   private detectMimeType(extension: string): string {
-    if (extension === 'png') {
-      return 'image/png';
+    if (extension === "png") {
+      return "image/png";
     }
 
-    if (extension === 'webp') {
-      return 'image/webp';
+    if (extension === "webp") {
+      return "image/webp";
     }
 
-    return 'image/jpeg';
+    return "image/jpeg";
   }
 
   private async writeLocally(
@@ -256,9 +290,9 @@ export class StorageService {
     originalBuffer: Buffer,
     thumbnailBuffer: Buffer,
   ): Promise<StoredImage> {
-    const localRoot = path.resolve(process.cwd(), '.local-storage');
-    const originalDir = path.join(localRoot, keyPrefix, 'original');
-    const thumbDir = path.join(localRoot, keyPrefix, 'thumb');
+    const localRoot = path.resolve(process.cwd(), ".local-storage");
+    const originalDir = path.join(localRoot, keyPrefix, "original");
+    const thumbDir = path.join(localRoot, keyPrefix, "thumb");
 
     await Promise.all([
       fs.mkdir(originalDir, { recursive: true }),

@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ScanStatus } from '../../prisma/client';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ScanStatus } from "../../prisma/client";
 
 export class ValidationHintDto {
   @ApiProperty()

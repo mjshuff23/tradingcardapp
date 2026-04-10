@@ -3,19 +3,19 @@ import {
   Injectable,
   NotFoundException,
   UnauthorizedException,
-} from '@nestjs/common';
-import * as argon2 from 'argon2';
-import { randomBytes } from 'node:crypto';
-import { Response } from 'express';
-import type { Express } from 'express';
-import { DEFAULT_LOCAL_USER } from '../common/catalog-normalization.util';
-import { PrismaService } from '../prisma/prisma.service';
-import { User } from '../prisma/client';
-import { StorageService } from '../storage/storage.service';
-import { AUTH_COOKIE_NAME, AUTH_SESSION_TTL_MS } from './auth.constants';
-import { AuthUserDto } from './dto/auth-user.dto';
-import { LoginDto } from './dto/login.dto';
-import { SignupDto } from './dto/signup.dto';
+} from "@nestjs/common";
+import * as argon2 from "argon2";
+import { randomBytes } from "node:crypto";
+import { Response } from "express";
+import type { Express } from "express";
+import { DEFAULT_LOCAL_USER } from "../common/catalog-normalization.util";
+import { PrismaService } from "../prisma/prisma.service";
+import { User } from "../prisma/client";
+import { StorageService } from "../storage/storage.service";
+import { AUTH_COOKIE_NAME, AUTH_SESSION_TTL_MS } from "./auth.constants";
+import { AuthUserDto } from "./dto/auth-user.dto";
+import { LoginDto } from "./dto/login.dto";
+import { SignupDto } from "./dto/signup.dto";
 
 @Injectable()
 export class AuthService {
@@ -34,7 +34,9 @@ export class AuthService {
     });
 
     if (existing) {
-      throw new ConflictException('An account with that email or username already exists.');
+      throw new ConflictException(
+        "An account with that email or username already exists.",
+      );
     }
 
     const passwordHash = await argon2.hash(dto.password);
@@ -54,19 +56,19 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid email or password.');
+      throw new UnauthorizedException("Invalid email or password.");
     }
 
     const validPassword = await argon2.verify(user.passwordHash, dto.password);
     if (!validPassword) {
-      throw new UnauthorizedException('Invalid email or password.');
+      throw new UnauthorizedException("Invalid email or password.");
     }
 
     return user;
   }
 
   async createSession(userId: string) {
-    const sessionToken = randomBytes(32).toString('hex');
+    const sessionToken = randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + AUTH_SESSION_TTL_MS);
 
     await this.prisma.session.create({
@@ -134,7 +136,10 @@ export class AuthService {
   }
 
   async uploadProfileImage(userId: string, file: Express.Multer.File) {
-    const storedImage = await this.storageService.uploadProfileImage(file.buffer, file.originalname);
+    const storedImage = await this.storageService.uploadProfileImage(
+      file.buffer,
+      file.originalname,
+    );
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: {
@@ -153,13 +158,13 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found.');
+      throw new NotFoundException("User not found.");
     }
 
     await Promise.all([
       this.storageService.deleteProfileImage(user.pfpOriginalImageKey),
       this.storageService.deleteProfileImage(user.pfpThumbnailImageKey),
-      user.pfpUrl?.startsWith('http://') || user.pfpUrl?.startsWith('https://')
+      user.pfpUrl?.startsWith("http://") || user.pfpUrl?.startsWith("https://")
         ? Promise.resolve()
         : this.storageService.deleteProfileImage(user.pfpUrl),
     ]);
@@ -182,7 +187,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found.');
+      throw new NotFoundException("User not found.");
     }
 
     const key =
@@ -191,7 +196,7 @@ export class AuthService {
       (user.pfpUrl && !isHttpUrl(user.pfpUrl) ? user.pfpUrl : null);
 
     if (!key) {
-      throw new NotFoundException('Profile image not found.');
+      throw new NotFoundException("Profile image not found.");
     }
 
     if (isHttpUrl(key)) {
@@ -201,28 +206,32 @@ export class AuthService {
     return this.storageService.readProfileImage(key);
   }
 
-  writeSessionCookie(response: Response, sessionToken: string, expiresAt: Date) {
+  writeSessionCookie(
+    response: Response,
+    sessionToken: string,
+    expiresAt: Date,
+  ) {
     response.cookie(AUTH_COOKIE_NAME, sessionToken, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
       expires: expiresAt,
-      path: '/',
+      path: "/",
     });
   }
 
   clearSessionCookie(response: Response) {
     response.clearCookie(AUTH_COOKIE_NAME, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
     });
   }
 
   private resolveProfileImageUrl(user: User): string | null {
     if (user.pfpThumbnailImageKey || user.pfpOriginalImageKey) {
-      return '/api/v1/auth/me/pfp';
+      return "/api/v1/auth/me/pfp";
     }
 
     if (user.pfpUrl && isHttpUrl(user.pfpUrl)) {
@@ -230,7 +239,7 @@ export class AuthService {
     }
 
     if (user.pfpUrl) {
-      return '/api/v1/auth/me/pfp';
+      return "/api/v1/auth/me/pfp";
     }
 
     return null;
@@ -246,13 +255,13 @@ export class AuthService {
       });
 
       if (!response.ok) {
-        throw new NotFoundException('Profile image fetch failed.');
+        throw new NotFoundException("Profile image fetch failed.");
       }
 
       const bytes = await response.arrayBuffer();
       return {
         buffer: Buffer.from(bytes),
-        contentType: response.headers.get('content-type') ?? 'image/jpeg',
+        contentType: response.headers.get("content-type") ?? "image/jpeg",
       };
     } finally {
       clearTimeout(timeoutId);
@@ -261,5 +270,7 @@ export class AuthService {
 }
 
 function isHttpUrl(value: string | null | undefined) {
-  return Boolean(value && (value.startsWith('http://') || value.startsWith('https://')));
+  return Boolean(
+    value && (value.startsWith("http://") || value.startsWith("https://")),
+  );
 }

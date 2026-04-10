@@ -1,11 +1,11 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { CollectionStatus } from '../../prisma/client';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { CollectionStatus } from "../../prisma/client";
 
 export enum CardImageSourceDto {
-  USER = 'USER',
-  CANONICAL = 'CANONICAL',
-  LEGACY = 'LEGACY',
-  NONE = 'NONE',
+  USER = "USER",
+  CANONICAL = "CANONICAL",
+  LEGACY = "LEGACY",
+  NONE = "NONE",
 }
 
 export class CardSetDto {
@@ -45,7 +45,11 @@ export class CardSetDto {
   @ApiProperty({ nullable: true })
   material!: string | null;
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true, nullable: true })
+  @ApiPropertyOptional({
+    type: "object",
+    additionalProperties: true,
+    nullable: true,
+  })
   metadata!: Record<string, unknown> | null;
 }
 
@@ -80,7 +84,11 @@ export class CardDefinitionDto {
   @ApiProperty()
   hasAutographVariant!: boolean;
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true, nullable: true })
+  @ApiPropertyOptional({
+    type: "object",
+    additionalProperties: true,
+    nullable: true,
+  })
   features!: Record<string, unknown> | null;
 
   @ApiProperty({ nullable: true })
@@ -101,7 +109,11 @@ export class CardDefinitionDto {
   @ApiProperty()
   isVintage!: boolean;
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true, nullable: true })
+  @ApiPropertyOptional({
+    type: "object",
+    additionalProperties: true,
+    nullable: true,
+  })
   metadata!: Record<string, unknown> | null;
 
   @ApiProperty({ type: CardSetDto, nullable: true })

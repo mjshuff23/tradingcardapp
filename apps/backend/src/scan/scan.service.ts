@@ -3,23 +3,30 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from '@nestjs/common';
-import { CollectionStatus, Prisma } from '../prisma/client';
-import { buildCardKey } from '../common/card-key.util';
-import { StructuredCardHints } from '../common/card-hints.util';
-import { normalizeText, overlapScore, tokenize } from '../common/normalize.util';
-import { levenshteinSimilarity, tokenCoverageScore } from '../common/similarity.util';
-import { SourceHint } from '../common/source-hint.type';
-import { UploadedFile } from '../common/uploaded-file.type';
-import { LookupService } from '../lookup/lookup.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { OcrService } from '../ocr/ocr.service';
-import { StorageService } from '../storage/storage.service';
-import { ValidationService } from '../validation/validation.service';
-import { CatalogIndexService } from '../catalog/catalog-index.service';
-import { TitleNormalizationService } from '../catalog/title-normalization.service';
-import { ConfirmScanDto } from './dto/confirm-scan.dto';
-import { LinkPreviewService } from './link-preview.service';
+} from "@nestjs/common";
+import { CollectionStatus, Prisma } from "../prisma/client";
+import { buildCardKey } from "../common/card-key.util";
+import { StructuredCardHints } from "../common/card-hints.util";
+import {
+  normalizeText,
+  overlapScore,
+  tokenize,
+} from "../common/normalize.util";
+import {
+  levenshteinSimilarity,
+  tokenCoverageScore,
+} from "../common/similarity.util";
+import { SourceHint } from "../common/source-hint.type";
+import { UploadedFile } from "../common/uploaded-file.type";
+import { LookupService } from "../lookup/lookup.service";
+import { PrismaService } from "../prisma/prisma.service";
+import { OcrService } from "../ocr/ocr.service";
+import { StorageService } from "../storage/storage.service";
+import { ValidationService } from "../validation/validation.service";
+import { CatalogIndexService } from "../catalog/catalog-index.service";
+import { TitleNormalizationService } from "../catalog/title-normalization.service";
+import { ConfirmScanDto } from "./dto/confirm-scan.dto";
+import { LinkPreviewService } from "./link-preview.service";
 
 type CandidateReference = {
   name: string;
@@ -38,64 +45,64 @@ type CandidateReference = {
 };
 
 const CARD_BRAND_KEYWORDS = [
-  'upper deck',
-  'topps',
-  'panini',
-  'skybox',
-  'donruss',
-  'prizm',
-  'hoops',
-  'fleer',
-  'bowman',
-  'score',
-  'pokemon',
-  'chrome',
-  'optic',
+  "upper deck",
+  "topps",
+  "panini",
+  "skybox",
+  "donruss",
+  "prizm",
+  "hoops",
+  "fleer",
+  "bowman",
+  "score",
+  "pokemon",
+  "chrome",
+  "optic",
 ];
 
 const CARD_SUBSET_KEYWORDS = [
-  'spx',
-  'sp authentic',
-  'die cut',
-  'refractor',
-  'holo',
-  'silver',
-  'finest',
-  'stadium club',
-  'rookie',
-  'auto',
-  'autograph',
-  'jersey',
-  'patch',
+  "spx",
+  "sp authentic",
+  "die cut",
+  "refractor",
+  "holo",
+  "silver",
+  "finest",
+  "stadium club",
+  "rookie",
+  "auto",
+  "autograph",
+  "jersey",
+  "patch",
 ];
 
 const REFERENCE_NOISE_TERMS = [
-  'for sale',
-  'sample',
-  'buy now',
-  'auction',
-  'lot of',
-  'price guide',
-  'checklist',
-  'for trade',
+  "for sale",
+  "sample",
+  "buy now",
+  "auction",
+  "lot of",
+  "price guide",
+  "checklist",
+  "for trade",
 ];
 
 const PROFILE_NOISE_TERMS = [
-  'wikipedia',
-  'biography',
-  'businessman',
-  'stats',
-  'facts',
-  'height',
-  'age',
-  'nascar',
+  "wikipedia",
+  "biography",
+  "businessman",
+  "stats",
+  "facts",
+  "height",
+  "age",
+  "nascar",
 ];
 
 const PROFILE_DOMAINS = [
-  'wikipedia.org',
-  'britannica.com',
-  'biography.com',
-  'basketball-reference.com',
+  "wikipedia.org",
+  "britannica.com",
+  "biography.com",
+  "basketball-reference.com",
 ];
 
 @Injectable()
@@ -113,25 +120,35 @@ export class ScanService {
     private readonly titleNormalizationService: TitleNormalizationService,
   ) {}
 
-  async createScan(params: { userId: string; frontFile?: UploadedFile; backFile?: UploadedFile }) {
+  async createScan(params: {
+    userId: string;
+    frontFile?: UploadedFile;
+    backFile?: UploadedFile;
+  }) {
     const frontFile = params.frontFile;
     const backFile = params.backFile;
 
     if (!frontFile || !frontFile.buffer) {
-      throw new BadRequestException('Front image file is required.');
+      throw new BadRequestException("Front image file is required.");
     }
 
     const [frontStoredImage, backStoredImage] = await Promise.all([
-      this.storageService.uploadScanImage(frontFile.buffer, frontFile.originalname),
+      this.storageService.uploadScanImage(
+        frontFile.buffer,
+        frontFile.originalname,
+      ),
       backFile
-        ? this.storageService.uploadScanImage(backFile.buffer, backFile.originalname)
+        ? this.storageService.uploadScanImage(
+            backFile.buffer,
+            backFile.originalname,
+          )
         : Promise.resolve(null),
     ]);
 
     const scanJob = await this.prisma.scanJob.create({
       data: {
         userId: params.userId,
-        status: 'QUEUED',
+        status: "QUEUED",
         sourceFilename: frontFile.originalname,
         originalImageKey: frontStoredImage.originalKey,
         thumbnailImageKey: frontStoredImage.thumbnailKey,
@@ -159,23 +176,24 @@ export class ScanService {
       where: { id: scanId, userId },
       include: {
         candidates: {
-          orderBy: [{ score: 'desc' }, { createdAt: 'asc' }],
+          orderBy: [{ score: "desc" }, { createdAt: "asc" }],
         },
       },
     });
 
     if (!scanJob) {
-      throw new NotFoundException('Scan not found.');
+      throw new NotFoundException("Scan not found.");
     }
 
     const enrichedCandidates = await Promise.all(
       scanJob.candidates.map(async (candidate) => {
         const sourceHints = this.normalizeSourceHints(candidate.sourceHints);
-        const enrichedSourceHints = await this.enrichSourceHintsWithPreviewImages(
-          scanId,
-          candidate.id,
-          sourceHints,
-        );
+        const enrichedSourceHints =
+          await this.enrichSourceHintsWithPreviewImages(
+            scanId,
+            candidate.id,
+            sourceHints,
+          );
         return {
           ...candidate,
           sourceHints: enrichedSourceHints,
@@ -198,7 +216,7 @@ export class ScanService {
   async getScanImage(
     scanId: number,
     userId: string,
-    side: 'front' | 'back',
+    side: "front" | "back",
   ): Promise<{ buffer: Buffer; contentType: string }> {
     const scanJob = await this.prisma.scanJob.findFirst({
       where: { id: scanId, userId },
@@ -211,13 +229,13 @@ export class ScanService {
     });
 
     if (!scanJob) {
-      throw new NotFoundException('Scan not found.');
+      throw new NotFoundException("Scan not found.");
     }
 
     const key =
-      side === 'front'
-        ? scanJob.thumbnailImageKey ?? scanJob.originalImageKey
-        : scanJob.backThumbnailImageKey ?? scanJob.backOriginalImageKey;
+      side === "front"
+        ? (scanJob.thumbnailImageKey ?? scanJob.originalImageKey)
+        : (scanJob.backThumbnailImageKey ?? scanJob.backOriginalImageKey);
 
     if (!key) {
       throw new NotFoundException(`${side} image not found for this scan.`);
@@ -233,7 +251,7 @@ export class ScanService {
     hintUrl: string,
   ): Promise<{ buffer: Buffer; contentType: string }> {
     if (!hintUrl.trim()) {
-      throw new BadRequestException('hintUrl is required.');
+      throw new BadRequestException("hintUrl is required.");
     }
 
     const candidate = await this.prisma.scanCandidate.findFirst({
@@ -252,17 +270,23 @@ export class ScanService {
     });
 
     if (!candidate) {
-      throw new NotFoundException('Scan candidate not found.');
+      throw new NotFoundException("Scan candidate not found.");
     }
 
-    const hint = this.normalizeSourceHints(candidate.sourceHints).find((item) => item.url === hintUrl);
+    const hint = this.normalizeSourceHints(candidate.sourceHints).find(
+      (item) => item.url === hintUrl,
+    );
     if (!hint) {
-      throw new NotFoundException('Source hint not found for candidate.');
+      throw new NotFoundException("Source hint not found for candidate.");
     }
 
-    const image = await this.linkPreviewService.getTrustedPreviewImage(hint.url);
+    const image = await this.linkPreviewService.getTrustedPreviewImage(
+      hint.url,
+    );
     if (!image) {
-      throw new NotFoundException('Trusted preview image not available for this source hint.');
+      throw new NotFoundException(
+        "Trusted preview image not available for this source hint.",
+      );
     }
 
     return image;
@@ -275,26 +299,34 @@ export class ScanService {
     });
 
     if (!scanJob) {
-      throw new NotFoundException('Scan not found.');
+      throw new NotFoundException("Scan not found.");
     }
 
     if (!scanJob.candidates.length) {
-      throw new BadRequestException('No scan candidates available to confirm.');
+      throw new BadRequestException("No scan candidates available to confirm.");
     }
 
-    const sortedCandidates = [...scanJob.candidates].sort((a, b) => b.score - a.score);
+    const sortedCandidates = [...scanJob.candidates].sort(
+      (a, b) => b.score - a.score,
+    );
     const selectedCandidate = dto.candidateId
       ? scanJob.candidates.find((candidate) => candidate.id === dto.candidateId)
       : sortedCandidates[0];
 
     if (!selectedCandidate) {
-      throw new BadRequestException('Selected candidate was not found.');
+      throw new BadRequestException("Selected candidate was not found.");
     }
 
     const merged = {
       name: dto.draft?.name ?? selectedCandidate.name,
-      set: dto.draft?.set ?? selectedCandidate.legacySetText ?? selectedCandidate.set,
-      setName: dto.draft?.setName ?? selectedCandidate.setName ?? selectedCandidate.set,
+      set:
+        dto.draft?.set ??
+        selectedCandidate.legacySetText ??
+        selectedCandidate.set,
+      setName:
+        dto.draft?.setName ??
+        selectedCandidate.setName ??
+        selectedCandidate.set,
       brand: dto.draft?.brand ?? selectedCandidate.brand ?? null,
       year: dto.draft?.year ?? selectedCandidate.year,
       yearManufactured: dto.draft?.year ?? selectedCandidate.year,
@@ -310,17 +342,20 @@ export class ScanService {
     };
 
     if (!merged.name) {
-      throw new BadRequestException('Card name is required when confirming a scan.');
+      throw new BadRequestException(
+        "Card name is required when confirming a scan.",
+      );
     }
 
-    const { cardDefinition } = await this.catalogIndexService.upsertCatalogNodes(merged);
+    const { cardDefinition } =
+      await this.catalogIndexService.upsertCatalogNodes(merged);
 
     if (dto.enrichment) {
       const currentMetadata =
         cardDefinition.metadata &&
-        typeof cardDefinition.metadata === 'object' &&
+        typeof cardDefinition.metadata === "object" &&
         !Array.isArray(cardDefinition.metadata)
-          ? (cardDefinition.metadata as Prisma.JsonObject)
+          ? cardDefinition.metadata
           : {};
 
       await this.prisma.cardDefinition.update({
@@ -340,7 +375,10 @@ export class ScanService {
     }
 
     const confidence = Number(
-      ((selectedCandidate.score + (selectedCandidate.validationScore ?? 0)) / 2).toFixed(3),
+      (
+        (selectedCandidate.score + (selectedCandidate.validationScore ?? 0)) /
+        2
+      ).toFixed(3),
     );
 
     await this.prisma.scanCandidate.updateMany({
@@ -355,14 +393,21 @@ export class ScanService {
 
     const keepScanImage = dto.keepScanImage !== false;
     const frontImageUrl = keepScanImage
-      ? scanJob.thumbnailImageKey ?? scanJob.originalImageKey
+      ? (scanJob.thumbnailImageKey ?? scanJob.originalImageKey)
       : null;
-    const frontOriginalImageKey = keepScanImage ? scanJob.originalImageKey : null;
-    const frontThumbnailImageKey = keepScanImage ? scanJob.thumbnailImageKey : null;
-    const backImageKey = keepScanImage ? scanJob.backThumbnailImageKey ?? null : null;
+    const frontOriginalImageKey = keepScanImage
+      ? scanJob.originalImageKey
+      : null;
+    const frontThumbnailImageKey = keepScanImage
+      ? scanJob.thumbnailImageKey
+      : null;
+    const backImageKey = keepScanImage
+      ? (scanJob.backThumbnailImageKey ?? null)
+      : null;
 
     const record =
-      (dto.collectionStatus ?? CollectionStatus.OWNED) === CollectionStatus.WANTED
+      (dto.collectionStatus ?? CollectionStatus.OWNED) ===
+      CollectionStatus.WANTED
         ? await this.prisma.userWishlist.upsert({
             where: {
               userId_cardDefinitionId: {
@@ -433,7 +478,7 @@ export class ScanService {
 
     await this.prisma.scanJob.update({
       where: { id: scanJob.id },
-      data: { status: 'CONFIRMED' },
+      data: { status: "CONFIRMED" },
     });
 
     return { id: record.id };
@@ -450,7 +495,7 @@ export class ScanService {
   ) {
     await this.prisma.scanJob.update({
       where: { id: scanId },
-      data: { status: 'PROCESSING' },
+      data: { status: "PROCESSING" },
     });
 
     try {
@@ -505,18 +550,20 @@ export class ScanService {
         this.prisma.scanJob.update({
           where: { id: scanId },
           data: {
-            status: 'NEEDS_REVIEW',
+            status: "NEEDS_REVIEW",
             ocrText: ocrResult.text,
             error: null,
           },
         }),
       ]);
     } catch (error) {
-      this.logger.error(`Failed processing scan ${scanId}: ${(error as Error).message}`);
+      this.logger.error(
+        `Failed processing scan ${scanId}: ${(error as Error).message}`,
+      );
       await this.prisma.scanJob.update({
         where: { id: scanId },
         data: {
-          status: 'FAILED',
+          status: "FAILED",
           error: (error as Error).message,
         },
       });
@@ -528,40 +575,42 @@ export class ScanService {
       include: {
         cardSet: true,
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { updatedAt: "desc" },
       take: 1200,
     });
 
-    const catalogDerived: CandidateReference[] = existingDefinitions.map((definition) => {
-      const number = this.extractReferenceNumber({
-        name: definition.name,
-        set: definition.cardSet?.setName ?? definition.legacySetText,
-        setName: definition.cardSet?.setName ?? null,
-        legacySetText: definition.legacySetText ?? null,
-        cardNumber: definition.cardNumber ?? null,
-        variant: definition.variant,
-        metadata: null,
-      });
+    const catalogDerived: CandidateReference[] = existingDefinitions.map(
+      (definition) => {
+        const number = this.extractReferenceNumber({
+          name: definition.name,
+          set: definition.cardSet?.setName ?? definition.legacySetText,
+          setName: definition.cardSet?.setName ?? null,
+          legacySetText: definition.legacySetText ?? null,
+          cardNumber: definition.cardNumber ?? null,
+          variant: definition.variant,
+          metadata: null,
+        });
 
-      return {
-        name: definition.name,
-        set: definition.cardSet?.setName ?? definition.legacySetText,
-        setName: definition.cardSet?.setName ?? null,
-        legacySetText: definition.legacySetText,
-        brand: definition.cardSet?.brand ?? null,
-        year: definition.cardSet?.yearManufactured ?? null,
-        season: definition.cardSet?.season ?? null,
-        cardNumber: definition.cardNumber ?? number,
-        player: definition.player,
-        variant: definition.variant,
-        sport: definition.cardSet?.sport ?? null,
-        source: 'catalog_card',
-        metadata: {
-          fromDefinitionId: definition.id,
-          number,
-        },
-      };
-    });
+        return {
+          name: definition.name,
+          set: definition.cardSet?.setName ?? definition.legacySetText,
+          setName: definition.cardSet?.setName ?? null,
+          legacySetText: definition.legacySetText,
+          brand: definition.cardSet?.brand ?? null,
+          year: definition.cardSet?.yearManufactured ?? null,
+          season: definition.cardSet?.season ?? null,
+          cardNumber: definition.cardNumber ?? number,
+          player: definition.player,
+          variant: definition.variant,
+          sport: definition.cardSet?.sport ?? null,
+          source: "catalog_card",
+          metadata: {
+            fromDefinitionId: definition.id,
+            number,
+          },
+        };
+      },
+    );
 
     return this.dedupeReferencesByKey(catalogDerived);
   }
@@ -579,15 +628,22 @@ export class ScanService {
     references: CandidateReference[],
   ) {
     const ocrText = ocr.text;
-    const backText = ocr.backText || '';
+    const backText = ocr.backText || "";
     const ocrTokens = tokenize(ocrText);
-    const lookupHints = ocr.lookup.hints.filter((hint) => this.isLookupHintCardLike(hint));
-    const lookupCorpus = normalizeText(lookupHints.map((hint) => hint.title).join(' '));
+    const lookupHints = ocr.lookup.hints.filter((hint) =>
+      this.isLookupHintCardLike(hint),
+    );
+    const lookupCorpus = normalizeText(
+      lookupHints.map((hint) => hint.title).join(" "),
+    );
     const lockedPlayer = this.detectLockedPlayer(
       `${ocrText} ${backText} ${lookupCorpus}`,
       references,
     );
-    const lookupDerivedReferences = this.buildLookupDerivedReferences(lookupHints, lockedPlayer);
+    const lookupDerivedReferences = this.buildLookupDerivedReferences(
+      lookupHints,
+      lockedPlayer,
+    );
     const allReferences = this.filterReferencesForRanking(
       this.dedupeReferencesByKey([...references, ...lookupDerivedReferences]),
     );
@@ -595,14 +651,14 @@ export class ScanService {
     if (!allReferences.length) {
       const fallbackValidation = this.validationService.validateCandidate(
         {
-          name: ocrText || 'Unknown Card',
+          name: ocrText || "Unknown Card",
         },
         ocrText,
       );
 
       return [
         {
-          name: ocrText || 'Unknown Card',
+          name: ocrText || "Unknown Card",
           set: null,
           year: null,
           player: null,
@@ -636,14 +692,21 @@ export class ScanService {
           reference.sport,
         ]
           .filter(Boolean)
-          .join(' ');
+          .join(" ");
 
         const normalizedSearchable = normalizeText(searchable);
         const overlap = overlapScore(ocrTokens, tokenize(searchable));
         const coverage = tokenCoverageScore(ocrText, searchable);
-        const fuzzy = levenshteinSimilarity(normalizeText(ocrText).slice(0, 220), normalizedSearchable);
+        const fuzzy = levenshteinSimilarity(
+          normalizeText(ocrText).slice(0, 220),
+          normalizedSearchable,
+        );
 
-        const yearBonus = this.computeYearBonus(reference.year, ocr.hints.years, ocrText);
+        const yearBonus = this.computeYearBonus(
+          reference.year,
+          ocr.hints.years,
+          ocrText,
+        );
         const structuredReference = this.countReferenceSignals(reference) >= 2;
         const playerBonus = structuredReference
           ? this.computePlayerBonus(reference.player, ocrText, backText)
@@ -655,7 +718,10 @@ export class ScanService {
           ...ocr.hints.brands,
           ...ocr.hints.subsets,
         ]);
-        const numberBonus = this.computeNumberBonus(reference, ocr.hints.cardNumbers);
+        const numberBonus = this.computeNumberBonus(
+          reference,
+          ocr.hints.cardNumbers,
+        );
         const lookupBonus =
           structuredReference && lookupHints.length > 0
             ? this.computeLookupBonus(searchable, lookupCorpus)
@@ -679,8 +745,14 @@ export class ScanService {
           ).toFixed(3),
         );
 
-        const validation = this.validationService.validateCandidate(reference, ocrText);
-        const matchedLookupHints = this.selectLookupHintsForCandidate(searchable, lookupHints);
+        const validation = this.validationService.validateCandidate(
+          reference,
+          ocrText,
+        );
+        const matchedLookupHints = this.selectLookupHintsForCandidate(
+          searchable,
+          lookupHints,
+        );
 
         return {
           ...reference,
@@ -701,7 +773,11 @@ export class ScanService {
     return this.trimLowConfidenceTail(playerFiltered);
   }
 
-  private computeYearBonus(referenceYear: number | null, hintYears: number[], ocrText: string): number {
+  private computeYearBonus(
+    referenceYear: number | null,
+    hintYears: number[],
+    ocrText: string,
+  ): number {
     if (!referenceYear) {
       return 0;
     }
@@ -717,7 +793,11 @@ export class ScanService {
     return 0;
   }
 
-  private computePlayerBonus(player: string | null, ocrText: string, backText: string): number {
+  private computePlayerBonus(
+    player: string | null,
+    ocrText: string,
+    backText: string,
+  ): number {
     if (!player) {
       return 0;
     }
@@ -742,7 +822,10 @@ export class ScanService {
     return 0;
   }
 
-  private computePlayerLockBonus(player: string | null, lockedPlayer: string | null): number {
+  private computePlayerLockBonus(
+    player: string | null,
+    lockedPlayer: string | null,
+  ): number {
     if (!lockedPlayer) {
       return 0;
     }
@@ -760,15 +843,23 @@ export class ScanService {
   }
 
   private computeSetBonus(
-    reference: Pick<CandidateReference, 'set' | 'setName' | 'legacySetText' | 'brand' | 'source'>,
+    reference: Pick<
+      CandidateReference,
+      "set" | "setName" | "legacySetText" | "brand" | "source"
+    >,
     ocrText: string,
     backText: string,
     setHints: string[],
   ): number {
     const setNormalized = normalizeText(
-      [reference.brand, reference.setName, reference.legacySetText, reference.set]
+      [
+        reference.brand,
+        reference.setName,
+        reference.legacySetText,
+        reference.set,
+      ]
         .filter(Boolean)
-        .join(' '),
+        .join(" "),
     );
     const sourceNormalized = normalizeText(reference.source);
     const full = normalizeText(ocrText);
@@ -781,19 +872,29 @@ export class ScanService {
       bonus += 0.05;
     }
 
-    if (setHints.some((hint) => setNormalized.includes(hint) || sourceNormalized.includes(hint))) {
+    if (
+      setHints.some(
+        (hint) =>
+          setNormalized.includes(hint) || sourceNormalized.includes(hint),
+      )
+    ) {
       bonus += 0.06;
     }
 
     return Number(Math.min(0.16, bonus).toFixed(3));
   }
 
-  private computeNumberBonus(reference: CandidateReference, cardNumbers: string[]): number {
+  private computeNumberBonus(
+    reference: CandidateReference,
+    cardNumbers: string[],
+  ): number {
     if (!cardNumbers.length) {
       return 0;
     }
 
-    const referenceNumber = normalizeText(reference.cardNumber) || this.extractReferenceNumber(reference);
+    const referenceNumber =
+      normalizeText(reference.cardNumber) ||
+      this.extractReferenceNumber(reference);
     if (!referenceNumber) {
       return 0;
     }
@@ -810,24 +911,32 @@ export class ScanService {
     return Number((coverage * 0.12).toFixed(3));
   }
 
-  private selectLookupHintsForCandidate(searchable: string, hints: SourceHint[]): SourceHint[] {
+  private selectLookupHintsForCandidate(
+    searchable: string,
+    hints: SourceHint[],
+  ): SourceHint[] {
     if (!hints.length) {
       return [];
     }
 
     return hints
       .filter((hint) => this.isLookupHintCardLike(hint))
-      .filter((hint) => tokenCoverageScore(`${hint.title} ${hint.url}`, searchable) >= 0.25)
+      .filter(
+        (hint) =>
+          tokenCoverageScore(`${hint.title} ${hint.url}`, searchable) >= 0.25,
+      )
       .slice(0, 2);
   }
 
-  private normalizeSourceHints(value: Prisma.JsonValue | null | undefined): SourceHint[] {
+  private normalizeSourceHints(
+    value: Prisma.JsonValue | null | undefined,
+  ): SourceHint[] {
     if (!value || !Array.isArray(value)) {
       return [];
     }
 
     return value
-      .filter((item) => typeof item === 'object' && item !== null)
+      .filter((item) => typeof item === "object" && item !== null)
       .map((item) => item as unknown as SourceHint)
       .filter((hint) => Boolean(hint.url && hint.title));
   }
@@ -841,7 +950,10 @@ export class ScanService {
       return [];
     }
 
-    const uniqueUrls = Array.from(new Set(hints.map((hint) => hint.url))).slice(0, 4);
+    const uniqueUrls = Array.from(new Set(hints.map((hint) => hint.url))).slice(
+      0,
+      4,
+    );
     const imageByUrl = new Map<string, string | null>();
 
     await Promise.all(
@@ -902,7 +1014,11 @@ export class ScanService {
     const candidates: CandidateReference[] = [];
 
     for (const hint of hints) {
-      if (hint.source !== 'web_lookup' || !hint.title || !this.isLookupHintCardLike(hint, lockedPlayer)) {
+      if (
+        hint.source !== "web_lookup" ||
+        !hint.title ||
+        !this.isLookupHintCardLike(hint, lockedPlayer)
+      ) {
         continue;
       }
 
@@ -918,12 +1034,15 @@ export class ScanService {
 
       candidates.push({
         ...parsed,
-        source: 'lookup_hint',
+        source: "lookup_hint",
         metadata: {
           lookupUrl: hint.url,
-          lookupProvider: hint.provider ?? 'web_lookup',
+          lookupProvider: hint.provider ?? "web_lookup",
           lookupScore: hint.score,
-          number: hint.title.match(/#\s*([a-z]?\d{1,4}[a-z]?)/i)?.[1]?.toUpperCase() ?? null,
+          number:
+            hint.title
+              .match(/#\s*([a-z]?\d{1,4}[a-z]?)/i)?.[1]
+              ?.toUpperCase() ?? null,
         },
       });
     }
@@ -934,9 +1053,9 @@ export class ScanService {
   private parseLookupHintTitle(
     title: string,
     lockedPlayer: string | null,
-  ): Omit<CandidateReference, 'source' | 'metadata'> | null {
+  ): Omit<CandidateReference, "source" | "metadata"> | null {
     const segments = title
-      .split(' - ')
+      .split(" - ")
       .map((segment) => segment.trim())
       .filter(Boolean);
 
@@ -947,18 +1066,31 @@ export class ScanService {
     const normalizedTitle = normalizeText(title);
     const yearMatch = normalizedTitle.match(/\b(19\d{2}|20\d{2})\b/);
     const year = yearMatch ? Number(yearMatch[1]) : null;
-    const normalized = this.titleNormalizationService.parseDeterministic(title, {
-      player: lockedPlayer ? this.titleCase(lockedPlayer) : null,
-      yearManufactured: year,
-    });
-    const setName = normalized.fields.setName ?? this.extractLookupSet(segments, normalizedTitle);
+    const normalized = this.titleNormalizationService.parseDeterministic(
+      title,
+      {
+        player: lockedPlayer ? this.titleCase(lockedPlayer) : null,
+        yearManufactured: year,
+      },
+    );
+    const setName =
+      normalized.fields.setName ??
+      this.extractLookupSet(segments, normalizedTitle);
     const brand = normalized.fields.brand ?? null;
     const season = normalized.fields.season ?? null;
-    const cardNumber = normalized.fields.cardNumber ?? this.extractCardNumberFromText(title);
-    const variant = normalized.fields.variant ?? this.extractLookupVariant(segments);
+    const cardNumber =
+      normalized.fields.cardNumber ?? this.extractCardNumberFromText(title);
+    const variant =
+      normalized.fields.variant ?? this.extractLookupVariant(segments);
     const player =
-      normalized.fields.player ?? (lockedPlayer ? this.titleCase(lockedPlayer) : null);
-    const name = this.extractLookupName(segments, lockedPlayer, title, normalized.fields.name ?? null);
+      normalized.fields.player ??
+      (lockedPlayer ? this.titleCase(lockedPlayer) : null);
+    const name = this.extractLookupName(
+      segments,
+      lockedPlayer,
+      title,
+      normalized.fields.name ?? null,
+    );
 
     if (!name) {
       return null;
@@ -975,26 +1107,30 @@ export class ScanService {
       cardNumber,
       player,
       variant,
-      sport: normalized.fields.sport ?? this.extractLookupSport(normalizedTitle),
+      sport:
+        normalized.fields.sport ?? this.extractLookupSport(normalizedTitle),
     };
   }
 
-  private extractLookupSet(segments: string[], normalizedTitle: string): string | null {
+  private extractLookupSet(
+    segments: string[],
+    normalizedTitle: string,
+  ): string | null {
     const setKeywords = [
-      'upper deck',
-      'topps',
-      'panini',
-      'skybox',
-      'donruss',
-      'prizm',
-      'hoops',
-      'fleer',
-      'bowman',
-      'score',
-      'pokemon',
-      'sp authentic',
-      'chrome',
-      'optic',
+      "upper deck",
+      "topps",
+      "panini",
+      "skybox",
+      "donruss",
+      "prizm",
+      "hoops",
+      "fleer",
+      "bowman",
+      "score",
+      "pokemon",
+      "sp authentic",
+      "chrome",
+      "optic",
     ];
 
     for (const keyword of setKeywords) {
@@ -1002,9 +1138,11 @@ export class ScanService {
         continue;
       }
 
-      const segment = segments.find((item) => normalizeText(item).includes(keyword));
+      const segment = segments.find((item) =>
+        normalizeText(item).includes(keyword),
+      );
       if (segment) {
-        return segment.replace(/\[[^\]]+]/g, '').trim();
+        return segment.replace(/\[[^\]]+]/g, "").trim();
       }
 
       return this.titleCase(keyword);
@@ -1014,7 +1152,9 @@ export class ScanService {
   }
 
   private extractLookupVariant(segments: string[]): string | null {
-    const segmentWithVariant = segments.find((segment) => /\[[^\]]+]/.test(segment));
+    const segmentWithVariant = segments.find((segment) =>
+      /\[[^\]]+]/.test(segment),
+    );
     if (!segmentWithVariant) {
       return null;
     }
@@ -1038,7 +1178,9 @@ export class ScanService {
         (segment) => normalizeText(segment) === lockedPlayer,
       );
       if (playerIndex > 0) {
-        const candidate = this.cleanLookupNameSegment(segments[playerIndex - 1]);
+        const candidate = this.cleanLookupNameSegment(
+          segments[playerIndex - 1],
+        );
         if (candidate) {
           return candidate;
         }
@@ -1056,9 +1198,9 @@ export class ScanService {
         normalized.length < 3 ||
         /^[a-z]?\d{2,8}[a-z]?$/.test(normalized) ||
         /\b(19\d{2}|20\d{2})\b/.test(normalized) ||
-        normalized.includes('comc') ||
-        normalized.includes('ebay') ||
-        normalized.includes('psa')
+        normalized.includes("comc") ||
+        normalized.includes("ebay") ||
+        normalized.includes("psa")
       ) {
         continue;
       }
@@ -1071,9 +1213,12 @@ export class ScanService {
     }
 
     const fallback = rawTitle
-      .replace(/#\s*[a-z]?\d{1,6}[a-z]?/gi, ' ')
-      .replace(/\b(19\d{2}|20\d{2})(?:\s*[-/]\s*(?:\d{2}|19\d{2}|20\d{2}))?\b/gi, ' ')
-      .replace(/\s+/g, ' ')
+      .replace(/#\s*[a-z]?\d{1,6}[a-z]?/gi, " ")
+      .replace(
+        /\b(19\d{2}|20\d{2})(?:\s*[-/]\s*(?:\d{2}|19\d{2}|20\d{2}))?\b/gi,
+        " ",
+      )
+      .replace(/\s+/g, " ")
       .trim();
 
     return fallback || null;
@@ -1081,24 +1226,24 @@ export class ScanService {
 
   private cleanLookupNameSegment(value: string): string | null {
     const cleaned = value
-      .replace(/\[[^\]]+]/g, ' ')
-      .replace(/#\s*[a-z]?\d{1,4}[a-z]?/gi, ' ')
-      .replace(/\s+/g, ' ')
+      .replace(/\[[^\]]+]/g, " ")
+      .replace(/#\s*[a-z]?\d{1,4}[a-z]?/gi, " ")
+      .replace(/\s+/g, " ")
       .trim();
 
     return cleaned || null;
   }
 
   private extractLookupSport(normalizedTitle: string): string | null {
-    if (normalizedTitle.includes('pokemon')) {
-      return 'pokemon';
+    if (normalizedTitle.includes("pokemon")) {
+      return "pokemon";
     }
     if (
-      normalizedTitle.includes('nba') ||
-      normalizedTitle.includes('basketball') ||
-      normalizedTitle.includes('bulls')
+      normalizedTitle.includes("nba") ||
+      normalizedTitle.includes("basketball") ||
+      normalizedTitle.includes("bulls")
     ) {
-      return 'basketball';
+      return "basketball";
     }
 
     return null;
@@ -1106,13 +1251,15 @@ export class ScanService {
 
   private titleCase(value: string): string {
     return value
-      .split(' ')
+      .split(" ")
       .filter(Boolean)
       .map((token) => `${token.charAt(0).toUpperCase()}${token.slice(1)}`)
-      .join(' ');
+      .join(" ");
   }
 
-  private dedupeReferencesByKey(references: CandidateReference[]): CandidateReference[] {
+  private dedupeReferencesByKey(
+    references: CandidateReference[],
+  ): CandidateReference[] {
     const map = new Map<string, CandidateReference>();
 
     for (const reference of references) {
@@ -1131,7 +1278,10 @@ export class ScanService {
         continue;
       }
 
-      if (reference.source === 'lookup_hint' && existing.source !== 'lookup_hint') {
+      if (
+        reference.source === "lookup_hint" &&
+        existing.source !== "lookup_hint"
+      ) {
         map.set(key, reference);
       }
     }
@@ -1184,13 +1334,20 @@ export class ScanService {
     return trimmed.slice(0, 8);
   }
 
-  private filterReferencesForRanking(references: CandidateReference[]): CandidateReference[] {
+  private filterReferencesForRanking(
+    references: CandidateReference[],
+  ): CandidateReference[] {
     return references.filter((reference) => this.isReferenceUsable(reference));
   }
 
   private isReferenceUsable(reference: CandidateReference): boolean {
     const combined = this.referenceText(reference);
-    if (this.hasNoiseTerms(combined, [...REFERENCE_NOISE_TERMS, ...PROFILE_NOISE_TERMS])) {
+    if (
+      this.hasNoiseTerms(combined, [
+        ...REFERENCE_NOISE_TERMS,
+        ...PROFILE_NOISE_TERMS,
+      ])
+    ) {
       return false;
     }
 
@@ -1200,15 +1357,26 @@ export class ScanService {
   private countReferenceSignals(reference: CandidateReference): number {
     const normalized = normalizeText(this.referenceText(reference));
     const setText = normalizeText(
-      [reference.brand, reference.setName, reference.legacySetText, reference.set]
+      [
+        reference.brand,
+        reference.setName,
+        reference.legacySetText,
+        reference.set,
+      ]
         .filter(Boolean)
-        .join(' '),
+        .join(" "),
     );
-    const hasBrandSignal = CARD_BRAND_KEYWORDS.some((keyword) => normalized.includes(keyword));
-    const hasSubsetSignal = CARD_SUBSET_KEYWORDS.some((keyword) => normalized.includes(keyword));
+    const hasBrandSignal = CARD_BRAND_KEYWORDS.some((keyword) =>
+      normalized.includes(keyword),
+    );
+    const hasSubsetSignal = CARD_SUBSET_KEYWORDS.some((keyword) =>
+      normalized.includes(keyword),
+    );
     const hasSetSignal =
       Boolean(setText) &&
-      (hasBrandSignal || tokenize(setText).length >= 2 || Boolean(this.extractReferenceNumber(reference)));
+      (hasBrandSignal ||
+        tokenize(setText).length >= 2 ||
+        Boolean(this.extractReferenceNumber(reference)));
 
     return [
       Boolean(reference.year),
@@ -1218,7 +1386,10 @@ export class ScanService {
     ].filter(Boolean).length;
   }
 
-  private isLookupHintCardLike(hint: SourceHint, lockedPlayer?: string | null): boolean {
+  private isLookupHintCardLike(
+    hint: SourceHint,
+    lockedPlayer?: string | null,
+  ): boolean {
     const normalizedTitle = normalizeText(hint.title);
     if (!normalizedTitle) {
       return false;
@@ -1232,7 +1403,12 @@ export class ScanService {
       return false;
     }
 
-    if (this.hasNoiseTerms(normalizedTitle, [...REFERENCE_NOISE_TERMS, ...PROFILE_NOISE_TERMS])) {
+    if (
+      this.hasNoiseTerms(normalizedTitle, [
+        ...REFERENCE_NOISE_TERMS,
+        ...PROFILE_NOISE_TERMS,
+      ])
+    ) {
       return false;
     }
 
@@ -1252,28 +1428,47 @@ export class ScanService {
   private extractReferenceNumber(
     reference: Pick<
       CandidateReference,
-      'name' | 'set' | 'setName' | 'legacySetText' | 'cardNumber' | 'variant' | 'metadata'
+      | "name"
+      | "set"
+      | "setName"
+      | "legacySetText"
+      | "cardNumber"
+      | "variant"
+      | "metadata"
     >,
   ): string | null {
     if (reference.cardNumber) {
       return reference.cardNumber.trim().toUpperCase();
     }
 
-    if (reference.metadata && typeof reference.metadata === 'object' && !Array.isArray(reference.metadata)) {
-      const metadataNumber = (reference.metadata as Record<string, unknown>).number;
-      if (typeof metadataNumber === 'string' && metadataNumber.trim()) {
+    if (
+      reference.metadata &&
+      typeof reference.metadata === "object" &&
+      !Array.isArray(reference.metadata)
+    ) {
+      const metadataNumber = (reference.metadata as Record<string, unknown>)
+        .number;
+      if (typeof metadataNumber === "string" && metadataNumber.trim()) {
         return metadataNumber.trim().toUpperCase();
       }
     }
 
     return this.extractCardNumberFromText(
-      [reference.name, reference.set, reference.setName, reference.legacySetText, reference.variant]
+      [
+        reference.name,
+        reference.set,
+        reference.setName,
+        reference.legacySetText,
+        reference.variant,
+      ]
         .filter(Boolean)
-        .join(' '),
+        .join(" "),
     );
   }
 
-  private extractCardNumberFromText(value: string | null | undefined): string | null {
+  private extractCardNumberFromText(
+    value: string | null | undefined,
+  ): string | null {
     if (!value) {
       return null;
     }
@@ -1300,7 +1495,7 @@ export class ScanService {
       reference.variant,
     ]
       .filter(Boolean)
-      .join(' ');
+      .join(" ");
   }
 
   private hasNoiseTerms(value: string, terms: string[]): boolean {
@@ -1311,7 +1506,9 @@ export class ScanService {
   private isKnownProfileDomain(value: string): boolean {
     try {
       const hostname = new URL(value).hostname.toLowerCase();
-      return PROFILE_DOMAINS.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+      return PROFILE_DOMAINS.some(
+        (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+      );
     } catch {
       return false;
     }
@@ -1335,5 +1532,4 @@ export class ScanService {
       hint.url,
     )}`;
   }
-
 }

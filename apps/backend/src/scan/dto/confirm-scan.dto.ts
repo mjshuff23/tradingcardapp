@@ -1,5 +1,5 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 import {
   IsBoolean,
   IsEnum,
@@ -9,8 +9,8 @@ import {
   Max,
   Min,
   ValidateNested,
-} from 'class-validator';
-import { CollectionStatus } from '../../prisma/client';
+} from "class-validator";
+import { CollectionStatus } from "../../prisma/client";
 
 export class ConfirmScanEnrichmentSourceDto {
   @ApiPropertyOptional()
@@ -50,11 +50,11 @@ export class ConfirmScanEnrichmentDto {
   @IsString()
   provider?: string;
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ type: "object", additionalProperties: true })
   @IsOptional()
   fields?: Record<string, unknown>;
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ type: "object", additionalProperties: true })
   @IsOptional()
   fieldConfidence?: Record<string, number>;
 
@@ -78,7 +78,7 @@ export class ConfirmScanEnrichmentDto {
   @IsBoolean()
   usedAi?: boolean;
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ type: "object", additionalProperties: true })
   @IsOptional()
   debug?: Record<string, unknown> | null;
 }
@@ -209,13 +209,18 @@ export class ConfirmScanDraftDto {
 }
 
 export class ConfirmScanDto {
-  @ApiPropertyOptional({ description: 'Candidate ID to confirm. Defaults to top candidate.' })
+  @ApiPropertyOptional({
+    description: "Candidate ID to confirm. Defaults to top candidate.",
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   candidateId?: number;
 
-  @ApiPropertyOptional({ enum: CollectionStatus, default: CollectionStatus.OWNED })
+  @ApiPropertyOptional({
+    enum: CollectionStatus,
+    default: CollectionStatus.OWNED,
+  })
   @IsOptional()
   @IsEnum(CollectionStatus)
   collectionStatus?: CollectionStatus;
@@ -230,14 +235,18 @@ export class ConfirmScanDto {
   @IsBoolean()
   promoteToCanonical?: boolean;
 
-  @ApiPropertyOptional({ description: 'Finalized draft applied before saving card', type: ConfirmScanDraftDto })
+  @ApiPropertyOptional({
+    description: "Finalized draft applied before saving card",
+    type: ConfirmScanDraftDto,
+  })
   @IsOptional()
   @ValidateNested()
   @Type(() => ConfirmScanDraftDto)
   draft?: ConfirmScanDraftDto;
 
   @ApiPropertyOptional({
-    description: 'Accepted web enrichment provenance persisted on the saved card definition',
+    description:
+      "Accepted web enrichment provenance persisted on the saved card definition",
     type: ConfirmScanEnrichmentDto,
   })
   @IsOptional()

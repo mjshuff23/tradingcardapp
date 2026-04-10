@@ -1,19 +1,19 @@
-import { tavily } from '@tavily/core';
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { tavily } from "@tavily/core";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import {
   inferBrand,
   inferCardNumber,
   normalizeNullableText,
-} from '../common/catalog-normalization.util';
-import { tokenize } from '../common/normalize.util';
-import { inferTaxonomyFromText } from '../catalog/card-taxonomy';
+} from "../common/catalog-normalization.util";
+import { tokenize } from "../common/normalize.util";
+import { inferTaxonomyFromText } from "../catalog/card-taxonomy";
 import {
   NormalizedTitleFields,
   TitleNormalizationService,
-} from '../catalog/title-normalization.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { ConfirmScanDraftDto } from './dto/confirm-scan.dto';
+} from "../catalog/title-normalization.service";
+import { PrismaService } from "../prisma/prisma.service";
+import { ConfirmScanDraftDto } from "./dto/confirm-scan.dto";
 
 type CandidateRow = {
   id: number;
@@ -50,20 +50,20 @@ type EvidenceSource = {
 type EnrichmentFields = Partial<
   Pick<
     ConfirmScanDraftDto,
-    | 'name'
-    | 'set'
-    | 'setName'
-    | 'brand'
-    | 'year'
-    | 'player'
-    | 'variant'
-    | 'sport'
-    | 'cardNumber'
-    | 'season'
-    | 'category'
-    | 'subcategory'
-    | 'hasAutographVariant'
-    | 'isVintage'
+    | "name"
+    | "set"
+    | "setName"
+    | "brand"
+    | "year"
+    | "player"
+    | "variant"
+    | "sport"
+    | "cardNumber"
+    | "season"
+    | "category"
+    | "subcategory"
+    | "hasAutographVariant"
+    | "isVintage"
   >
 >;
 
@@ -118,7 +118,7 @@ export class ScanEnrichmentService {
     });
 
     if (!candidate) {
-      throw new NotFoundException('Scan candidate not found.');
+      throw new NotFoundException("Scan candidate not found.");
     }
 
     const queries = this.buildQueries(candidate, draft);
@@ -130,7 +130,7 @@ export class ScanEnrichmentService {
 
     for (const provider of providerOrder) {
       const next =
-        provider === 'tavily'
+        provider === "tavily"
           ? await this.searchWithTavily(queries, candidate, maxResults)
           : await this.searchWithDuckDuckGo(queries, candidate, maxResults);
 
@@ -144,17 +144,32 @@ export class ScanEnrichmentService {
       }
     }
 
-    const deterministic = this.extractDeterministicFields(candidate, draft, sources);
-    const refined = await this.refineWithAiIfEnabled(candidate, deterministic, sources);
+    const deterministic = this.extractDeterministicFields(
+      candidate,
+      draft,
+      sources,
+    );
+    const refined = await this.refineWithAiIfEnabled(
+      candidate,
+      deterministic,
+      sources,
+    );
     const fields = this.toDraftFields(candidate, refined.fields);
 
     return {
       fields,
-      fieldConfidence: this.toDraftConfidenceMap(refined.fieldConfidence, fields),
+      fieldConfidence: this.toDraftConfidenceMap(
+        refined.fieldConfidence,
+        fields,
+      ),
       confidence: refined.confidence,
       usedAi: refined.usedAi,
       provider:
-        providerHits.size > 1 ? 'mixed' : providerHits.size === 1 ? [...providerHits][0] : 'none',
+        providerHits.size > 1
+          ? "mixed"
+          : providerHits.size === 1
+            ? [...providerHits][0]
+            : "none",
       queries,
       sources: sources.map((source) => ({
         provider: source.provider,
@@ -175,21 +190,27 @@ export class ScanEnrichmentService {
 
   private getProviderOrder() {
     const configured =
-      this.configService.get<string>('CARD_METADATA_ENRICHMENT_PROVIDER_ORDER') ??
-      'tavily,duckduckgo';
+      this.configService.get<string>(
+        "CARD_METADATA_ENRICHMENT_PROVIDER_ORDER",
+      ) ?? "tavily,duckduckgo";
     const requested = configured
-      .split(',')
+      .split(",")
       .map((value) => value.trim().toLowerCase())
-      .filter((value) => value === 'tavily' || value === 'duckduckgo');
-    const providers = requested.length ? requested : ['tavily', 'duckduckgo'];
+      .filter((value) => value === "tavily" || value === "duckduckgo");
+    const providers = requested.length ? requested : ["tavily", "duckduckgo"];
 
     return providers.filter((provider) =>
-      provider === 'tavily' ? Boolean(this.configService.get<string>('TAVILY_API_KEY')) : true,
+      provider === "tavily"
+        ? Boolean(this.configService.get<string>("TAVILY_API_KEY"))
+        : true,
     );
   }
 
   private getMaxResults() {
-    const raw = Number(this.configService.get<string>('CARD_METADATA_ENRICHMENT_MAX_RESULTS') ?? 5);
+    const raw = Number(
+      this.configService.get<string>("CARD_METADATA_ENRICHMENT_MAX_RESULTS") ??
+        5,
+    );
     if (!Number.isFinite(raw) || raw <= 0) {
       return 5;
     }
@@ -203,29 +224,36 @@ export class ScanEnrichmentService {
       draft?.brand ?? candidate.brand,
       draft?.player ?? candidate.player,
       draft?.name ?? candidate.name,
-      draft?.setName ?? draft?.set ?? candidate.setName ?? candidate.legacySetText ?? candidate.set,
-      draft?.cardNumber ?? candidate.cardNumber
+      draft?.setName ??
+        draft?.set ??
+        candidate.setName ??
+        candidate.legacySetText ??
+        candidate.set,
+      (draft?.cardNumber ?? candidate.cardNumber)
         ? `#${draft?.cardNumber ?? candidate.cardNumber}`
         : null,
       draft?.variant ?? candidate.variant,
       draft?.sport ?? candidate.sport,
-      'trading card',
+      "trading card",
     ].filter(Boolean);
 
     const queries = [
-      identityBits.join(' '),
+      identityBits.join(" "),
       [
         draft?.player ?? candidate.player,
         draft?.brand ?? candidate.brand,
-        draft?.setName ?? candidate.setName ?? candidate.legacySetText ?? candidate.set,
-        draft?.cardNumber ?? candidate.cardNumber
+        draft?.setName ??
+          candidate.setName ??
+          candidate.legacySetText ??
+          candidate.set,
+        (draft?.cardNumber ?? candidate.cardNumber)
           ? `card ${draft?.cardNumber ?? candidate.cardNumber}`
           : null,
         draft?.season ?? candidate.season ?? draft?.year ?? candidate.year,
-        'checklist',
+        "checklist",
       ]
         .filter(Boolean)
-        .join(' '),
+        .join(" "),
       [
         draft?.player ?? candidate.player,
         draft?.name ?? candidate.name,
@@ -234,9 +262,9 @@ export class ScanEnrichmentService {
         draft?.sport ?? candidate.sport,
       ]
         .filter(Boolean)
-        .join(' '),
+        .join(" "),
     ]
-      .map((query) => query.replace(/\s+/g, ' ').trim())
+      .map((query) => query.replace(/\s+/g, " ").trim())
       .filter(Boolean);
 
     return [...new Set(queries)];
@@ -247,7 +275,7 @@ export class ScanEnrichmentService {
     candidate: CandidateRow,
     maxResults: number,
   ): Promise<EvidenceSource[]> {
-    const apiKey = this.configService.get<string>('TAVILY_API_KEY');
+    const apiKey = this.configService.get<string>("TAVILY_API_KEY");
     if (!apiKey) {
       return [];
     }
@@ -258,23 +286,25 @@ export class ScanEnrichmentService {
     for (const query of queries) {
       try {
         const response = await client.search(query, {
-          topic: 'general',
-          searchDepth: 'basic',
+          topic: "general",
+          searchDepth: "basic",
           maxResults,
-          includeRawContent: 'text',
+          includeRawContent: "text",
           includeAnswer: false,
           timeout: 8000,
         });
 
         for (const result of response.results) {
           const scored = this.scoreEvidenceSource(candidate, query, {
-            provider: 'tavily',
+            provider: "tavily",
             query,
             url: result.url,
             title: result.title,
             snippet: normalizeNullableText(result.content),
             score: result.score ?? 0,
-            content: [result.title, result.content, result.rawContent].filter(Boolean).join('\n'),
+            content: [result.title, result.content, result.rawContent]
+              .filter(Boolean)
+              .join("\n"),
             rawContent: result.rawContent ?? null,
           });
 
@@ -284,7 +314,9 @@ export class ScanEnrichmentService {
           }
         }
       } catch (error) {
-        this.logger.warn(`Tavily search failed for "${query}": ${(error as Error).message}`);
+        this.logger.warn(
+          `Tavily search failed for "${query}": ${(error as Error).message}`,
+        );
       }
     }
 
@@ -300,12 +332,14 @@ export class ScanEnrichmentService {
       const extract = await client.extract(
         top.map((source) => source.url),
         {
-          format: 'text',
-          extractDepth: 'basic',
+          format: "text",
+          extractDepth: "basic",
           timeout: 8000,
         },
       );
-      const extractedByUrl = new Map(extract.results.map((result) => [result.url, result]));
+      const extractedByUrl = new Map(
+        extract.results.map((result) => [result.url, result]),
+      );
 
       return top.map((source) => {
         const extracted = extractedByUrl.get(source.url);
@@ -316,7 +350,9 @@ export class ScanEnrichmentService {
         return this.scoreEvidenceSource(candidate, source.query, {
           ...source,
           title: extracted.title ?? source.title,
-          content: [source.title, source.snippet, extracted.rawContent].filter(Boolean).join('\n'),
+          content: [source.title, source.snippet, extracted.rawContent]
+            .filter(Boolean)
+            .join("\n"),
           rawContent: extracted.rawContent,
         });
       });
@@ -339,8 +375,8 @@ export class ScanEnrichmentService {
           `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
           {
             headers: {
-              'User-Agent':
-                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36',
+              "User-Agent":
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
             },
           },
         );
@@ -351,7 +387,9 @@ export class ScanEnrichmentService {
 
         const html = await response.text();
         const matches = Array.from(
-          html.matchAll(/<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gis),
+          html.matchAll(
+            /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gis,
+          ),
         ).slice(0, maxResults);
 
         for (const [index, match] of matches.entries()) {
@@ -363,7 +401,7 @@ export class ScanEnrichmentService {
 
           const fetched = await this.fetchPageEvidence(url);
           const scored = this.scoreEvidenceSource(candidate, query, {
-            provider: 'duckduckgo',
+            provider: "duckduckgo",
             query,
             url,
             title: fetched?.title ?? title,
@@ -379,7 +417,9 @@ export class ScanEnrichmentService {
           }
         }
       } catch (error) {
-        this.logger.warn(`DuckDuckGo search failed for "${query}": ${(error as Error).message}`);
+        this.logger.warn(
+          `DuckDuckGo search failed for "${query}": ${(error as Error).message}`,
+        );
       }
     }
 
@@ -396,8 +436,8 @@ export class ScanEnrichmentService {
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
-          'User-Agent':
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36',
+          "User-Agent":
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
         },
       });
 
@@ -405,41 +445,43 @@ export class ScanEnrichmentService {
         return null;
       }
 
-      const contentType = response.headers.get('content-type') ?? '';
-      if (!contentType.includes('html')) {
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.includes("html")) {
         return null;
       }
 
       const html = await response.text();
       const title =
-        this.extractMetaContent(html, 'property', 'og:title') ??
-        this.extractTagText(html, 'title') ??
-        this.extractTagText(html, 'h1') ??
+        this.extractMetaContent(html, "property", "og:title") ??
+        this.extractTagText(html, "title") ??
+        this.extractTagText(html, "h1") ??
         url;
       const description =
-        this.extractMetaContent(html, 'name', 'description') ??
-        this.extractMetaContent(html, 'property', 'og:description');
-      const h1 = this.extractTagText(html, 'h1');
+        this.extractMetaContent(html, "name", "description") ??
+        this.extractMetaContent(html, "property", "og:description");
+      const h1 = this.extractTagText(html, "h1");
       const jsonLd = Array.from(
         html.matchAll(
           /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
         ),
       )
         .map((match) => match[1])
-        .join(' ');
+        .join(" ");
       const plainText = this.stripHtml(
         html
-          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-          .replace(/<style[\s\S]*?<\/style>/gi, ' '),
+          .replace(/<script[\s\S]*?<\/script>/gi, " ")
+          .replace(/<style[\s\S]*?<\/style>/gi, " "),
       )
-        .replace(/\s+/g, ' ')
+        .replace(/\s+/g, " ")
         .trim()
         .slice(0, 3200);
 
       return {
         title,
         snippet: normalizeNullableText(description ?? h1 ?? null),
-        content: [title, description, h1, this.stripHtml(jsonLd), plainText].filter(Boolean).join('\n'),
+        content: [title, description, h1, this.stripHtml(jsonLd), plainText]
+          .filter(Boolean)
+          .join("\n"),
         rawContent: plainText,
       };
     } catch {
@@ -466,7 +508,8 @@ export class ScanEnrichmentService {
         candidate.set,
       yearManufactured: draft?.year ?? candidate.year ?? undefined,
       season: normalizeNullableText(draft?.season) ?? candidate.season,
-      cardNumber: normalizeNullableText(draft?.cardNumber) ?? candidate.cardNumber,
+      cardNumber:
+        normalizeNullableText(draft?.cardNumber) ?? candidate.cardNumber,
       sport: normalizeNullableText(draft?.sport) ?? candidate.sport,
       variant: normalizeNullableText(draft?.variant) ?? candidate.variant,
       category: normalizeNullableText(draft?.category),
@@ -481,16 +524,19 @@ export class ScanEnrichmentService {
       ...sources.slice(0, 3).map((source) => source.snippet),
     ]
       .filter(Boolean)
-      .join(' ');
+      .join(" ");
 
-    const deterministic = this.titleNormalizationService.parseDeterministic(condensed, seeded);
+    const deterministic = this.titleNormalizationService.parseDeterministic(
+      condensed,
+      seeded,
+    );
     const evidenceText = [
       condensed,
-      candidate.scanJob.ocrText ?? '',
+      candidate.scanJob.ocrText ?? "",
       ...sources.slice(0, 5).map((source) => source.content),
     ]
       .filter(Boolean)
-      .join(' ');
+      .join(" ");
 
     if (!deterministic.fields.brand) {
       const inferredBrand = inferBrand(evidenceText);
@@ -514,7 +560,10 @@ export class ScanEnrichmentService {
 
     if (!deterministic.fields.sport && candidate.sport) {
       deterministic.fields.sport = candidate.sport;
-      deterministic.fieldConfidence.sport = Math.max(deterministic.fieldConfidence.sport ?? 0, 0.7);
+      deterministic.fieldConfidence.sport = Math.max(
+        deterministic.fieldConfidence.sport ?? 0,
+        0.7,
+      );
     }
 
     if (!deterministic.fields.category || !deterministic.fields.subcategory) {
@@ -539,7 +588,8 @@ export class ScanEnrichmentService {
       confidenceValues.length > 0
         ? Number(
             (
-              confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length
+              confidenceValues.reduce((sum, value) => sum + value, 0) /
+              confidenceValues.length
             ).toFixed(3),
           )
         : deterministic.confidence;
@@ -549,15 +599,24 @@ export class ScanEnrichmentService {
 
   private async refineWithAiIfEnabled(
     candidate: CandidateRow,
-    deterministic: ReturnType<TitleNormalizationService['parseDeterministic']>,
+    deterministic: ReturnType<TitleNormalizationService["parseDeterministic"]>,
     sources: EvidenceSource[],
   ) {
     const enabled =
-      this.configService.get<string>('CARD_METADATA_ENRICHMENT_ENABLED') === 'true';
-    const model = this.configService.get<string>('CARD_METADATA_ENRICHMENT_MODEL');
-    const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+      this.configService.get<string>("CARD_METADATA_ENRICHMENT_ENABLED") ===
+      "true";
+    const model = this.configService.get<string>(
+      "CARD_METADATA_ENRICHMENT_MODEL",
+    );
+    const apiKey = this.configService.get<string>("OPENAI_API_KEY");
 
-    if (!enabled || !model || !apiKey || deterministic.confidence >= 0.92 || !sources.length) {
+    if (
+      !enabled ||
+      !model ||
+      !apiKey ||
+      deterministic.confidence >= 0.92 ||
+      !sources.length
+    ) {
       return deterministic;
     }
 
@@ -565,49 +624,55 @@ export class ScanEnrichmentService {
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+      const response = await fetch(
+        "https://api.openai.com/v1/chat/completions",
+        {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            response_format: { type: "json_object" },
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You extract likely structured metadata for a trading card from web evidence. Return only valid JSON.",
+              },
+              {
+                role: "user",
+                content: JSON.stringify({
+                  candidate: {
+                    name: candidate.name,
+                    player: candidate.player,
+                    brand: candidate.brand,
+                    setName:
+                      candidate.setName ??
+                      candidate.legacySetText ??
+                      candidate.set,
+                    year: candidate.year,
+                    season: candidate.season,
+                    cardNumber: candidate.cardNumber,
+                    variant: candidate.variant,
+                    sport: candidate.sport,
+                  },
+                  deterministic: deterministic.fields,
+                  evidence: sources.slice(0, 5).map((source) => ({
+                    title: source.title,
+                    url: source.url,
+                    content: source.content.slice(0, 1800),
+                  })),
+                  schema:
+                    'Return {"fields":{"name":string|null,"set":string|null,"setName":string|null,"brand":string|null,"year":number|null,"player":string|null,"variant":string|null,"sport":string|null,"cardNumber":string|null,"season":string|null,"category":string|null,"subcategory":string|null,"hasAutographVariant":boolean|null,"isVintage":boolean|null},"fieldConfidence":{"field":0-1}}',
+                }),
+              },
+            ],
+          }),
         },
-        body: JSON.stringify({
-          model,
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content:
-                'You extract likely structured metadata for a trading card from web evidence. Return only valid JSON.',
-            },
-            {
-              role: 'user',
-              content: JSON.stringify({
-                candidate: {
-                  name: candidate.name,
-                  player: candidate.player,
-                  brand: candidate.brand,
-                  setName: candidate.setName ?? candidate.legacySetText ?? candidate.set,
-                  year: candidate.year,
-                  season: candidate.season,
-                  cardNumber: candidate.cardNumber,
-                  variant: candidate.variant,
-                  sport: candidate.sport,
-                },
-                deterministic: deterministic.fields,
-                evidence: sources.slice(0, 5).map((source) => ({
-                  title: source.title,
-                  url: source.url,
-                  content: source.content.slice(0, 1800),
-                })),
-                schema:
-                  'Return {"fields":{"name":string|null,"set":string|null,"setName":string|null,"brand":string|null,"year":number|null,"player":string|null,"variant":string|null,"sport":string|null,"cardNumber":string|null,"season":string|null,"category":string|null,"subcategory":string|null,"hasAutographVariant":boolean|null,"isVintage":boolean|null},"fieldConfidence":{"field":0-1}}',
-              }),
-            },
-          ],
-        }),
-      });
+      );
 
       if (!response.ok) {
         throw new Error(`OpenAI enrichment request failed: ${response.status}`);
@@ -627,14 +692,19 @@ export class ScanEnrichmentService {
         fieldConfidence?: Record<string, number>;
       };
 
-      const mappedFields = this.fromDraftFields(parsed.fields ?? {}, deterministic.fields);
+      const mappedFields = this.fromDraftFields(
+        parsed.fields ?? {},
+        deterministic.fields,
+      );
       const mergedConfidence = {
         ...deterministic.fieldConfidence,
       };
 
-      for (const [field, value] of Object.entries(parsed.fieldConfidence ?? {})) {
-        if (typeof value === 'number' && Number.isFinite(value)) {
-          const mappedField = field === 'year' ? 'yearManufactured' : field;
+      for (const [field, value] of Object.entries(
+        parsed.fieldConfidence ?? {},
+      )) {
+        if (typeof value === "number" && Number.isFinite(value)) {
+          const mappedField = field === "year" ? "yearManufactured" : field;
           mergedConfidence[mappedField] = Number(value.toFixed(3));
         }
       }
@@ -642,7 +712,9 @@ export class ScanEnrichmentService {
       const mergedFields = {
         ...deterministic.fields,
         ...Object.fromEntries(
-          Object.entries(mappedFields).filter(([, value]) => value !== null && value !== undefined),
+          Object.entries(mappedFields).filter(
+            ([, value]) => value !== null && value !== undefined,
+          ),
         ),
       };
 
@@ -655,21 +727,27 @@ export class ScanEnrichmentService {
           confidenceValues.length > 0
             ? Number(
                 (
-                  confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length
+                  confidenceValues.reduce((sum, value) => sum + value, 0) /
+                  confidenceValues.length
                 ).toFixed(3),
               )
             : deterministic.confidence,
         usedAi: true,
       };
     } catch (error) {
-      this.logger.warn(`OpenAI enrichment failed, using deterministic fallback: ${(error as Error).message}`);
+      this.logger.warn(
+        `OpenAI enrichment failed, using deterministic fallback: ${(error as Error).message}`,
+      );
       return deterministic;
     } finally {
       clearTimeout(timeoutId);
     }
   }
 
-  private toDraftFields(candidate: CandidateRow, fields: NormalizedTitleFields): EnrichmentFields {
+  private toDraftFields(
+    candidate: CandidateRow,
+    fields: NormalizedTitleFields,
+  ): EnrichmentFields {
     const setText =
       normalizeNullableText(fields.setName) ??
       candidate.setName ??
@@ -681,7 +759,10 @@ export class ScanEnrichmentService {
       set: setText,
       setName: normalizeNullableText(fields.setName) ?? setText,
       brand: normalizeNullableText(fields.brand),
-      year: typeof fields.yearManufactured === 'number' ? fields.yearManufactured : null,
+      year:
+        typeof fields.yearManufactured === "number"
+          ? fields.yearManufactured
+          : null,
       player: normalizeNullableText(fields.player),
       variant: normalizeNullableText(fields.variant),
       sport: normalizeNullableText(fields.sport),
@@ -690,8 +771,11 @@ export class ScanEnrichmentService {
       category: normalizeNullableText(fields.category),
       subcategory: normalizeNullableText(fields.subcategory),
       hasAutographVariant:
-        fields.hasAutographVariant === undefined ? null : Boolean(fields.hasAutographVariant),
-      isVintage: fields.isVintage === undefined ? null : Boolean(fields.isVintage),
+        fields.hasAutographVariant === undefined
+          ? null
+          : Boolean(fields.hasAutographVariant),
+      isVintage:
+        fields.isVintage === undefined ? null : Boolean(fields.isVintage),
     };
   }
 
@@ -710,13 +794,16 @@ export class ScanEnrichmentService {
         fallback.setName,
       yearManufactured: fields.year ?? fallback.yearManufactured,
       season: normalizeNullableText(fields.season) ?? fallback.season,
-      cardNumber: normalizeNullableText(fields.cardNumber) ?? fallback.cardNumber,
+      cardNumber:
+        normalizeNullableText(fields.cardNumber) ?? fallback.cardNumber,
       sport: normalizeNullableText(fields.sport) ?? fallback.sport,
       variant: normalizeNullableText(fields.variant) ?? fallback.variant,
       category: normalizeNullableText(fields.category) ?? fallback.category,
-      subcategory: normalizeNullableText(fields.subcategory) ?? fallback.subcategory,
+      subcategory:
+        normalizeNullableText(fields.subcategory) ?? fallback.subcategory,
       hasAutographVariant:
-        fields.hasAutographVariant === null || fields.hasAutographVariant === undefined
+        fields.hasAutographVariant === null ||
+        fields.hasAutographVariant === undefined
           ? fallback.hasAutographVariant
           : Boolean(fields.hasAutographVariant),
       isVintage:
@@ -733,9 +820,9 @@ export class ScanEnrichmentService {
     const mapped: Record<string, number> = {};
 
     for (const key of Object.keys(fields)) {
-      const confidenceKey = key === 'year' ? 'yearManufactured' : key;
+      const confidenceKey = key === "year" ? "yearManufactured" : key;
       const confidence = fieldConfidence[confidenceKey];
-      if (typeof confidence === 'number' && Number.isFinite(confidence)) {
+      if (typeof confidence === "number" && Number.isFinite(confidence)) {
         mapped[key] = confidence;
       }
     }
@@ -743,24 +830,34 @@ export class ScanEnrichmentService {
     return mapped;
   }
 
-  private buildCandidateIdentityString(candidate: CandidateRow, draft?: ConfirmScanDraftDto) {
+  private buildCandidateIdentityString(
+    candidate: CandidateRow,
+    draft?: ConfirmScanDraftDto,
+  ) {
     return [
       draft?.season ?? candidate.season ?? draft?.year ?? candidate.year,
       draft?.brand ?? candidate.brand,
       draft?.player ?? candidate.player,
       draft?.name ?? candidate.name,
-      draft?.setName ?? draft?.set ?? candidate.setName ?? candidate.legacySetText ?? candidate.set,
-      draft?.cardNumber ?? candidate.cardNumber
+      draft?.setName ??
+        draft?.set ??
+        candidate.setName ??
+        candidate.legacySetText ??
+        candidate.set,
+      (draft?.cardNumber ?? candidate.cardNumber)
         ? `#${draft?.cardNumber ?? candidate.cardNumber}`
         : null,
       draft?.variant ?? candidate.variant,
       draft?.sport ?? candidate.sport,
     ]
       .filter(Boolean)
-      .join(' ');
+      .join(" ");
   }
 
-  private mergeEvidenceSources(current: EvidenceSource[], next: EvidenceSource[]) {
+  private mergeEvidenceSources(
+    current: EvidenceSource[],
+    next: EvidenceSource[],
+  ) {
     const merged = new Map(current.map((source) => [source.url, source]));
 
     for (const source of next) {
@@ -778,74 +875,93 @@ export class ScanEnrichmentService {
     query: string,
     source: EvidenceSource,
   ): EvidenceSource {
-    const identityTokens = tokenize(this.buildCandidateIdentityString(candidate) + ' ' + query);
-    const sourceTokens = tokenize(`${source.title} ${source.snippet ?? ''} ${source.content}`);
+    const identityTokens = tokenize(
+      this.buildCandidateIdentityString(candidate) + " " + query,
+    );
+    const sourceTokens = tokenize(
+      `${source.title} ${source.snippet ?? ""} ${source.content}`,
+    );
     const overlap =
       identityTokens.length > 0
-        ? identityTokens.filter((token) => sourceTokens.includes(token)).length /
-          identityTokens.length
+        ? identityTokens.filter((token) => sourceTokens.includes(token))
+            .length / identityTokens.length
         : 0;
 
     const domainBonus = [
-      'ebay.',
-      'psacard.',
-      'beckett.',
-      'tcdb.',
-      'comc.',
-      'collx.app',
-      'sportscardspro.',
-      'cardboardconnection.',
+      "ebay.",
+      "psacard.",
+      "beckett.",
+      "tcdb.",
+      "comc.",
+      "collx.app",
+      "sportscardspro.",
+      "cardboardconnection.",
     ].some((domain) => source.url.toLowerCase().includes(domain))
       ? 0.12
       : 0;
-    const cardSignal = /\b(card|rookie|autograph|auto|refractor|parallel|prizm|deck|topps|panini)\b/i.test(
-      `${source.title} ${source.snippet ?? ''} ${source.content}`,
-    )
-      ? 0.08
-      : -0.04;
+    const cardSignal =
+      /\b(card|rookie|autograph|auto|refractor|parallel|prizm|deck|topps|panini)\b/i.test(
+        `${source.title} ${source.snippet ?? ""} ${source.content}`,
+      )
+        ? 0.08
+        : -0.04;
 
     return {
       ...source,
       score: Number(
         Math.max(
           0.05,
-          Math.min(0.99, source.score * 0.4 + overlap * 0.45 + domainBonus + cardSignal),
+          Math.min(
+            0.99,
+            source.score * 0.4 + overlap * 0.45 + domainBonus + cardSignal,
+          ),
         ).toFixed(3),
       ),
     };
   }
 
-  private extractMetaContent(html: string, attribute: 'name' | 'property', value: string) {
-    const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  private extractMetaContent(
+    html: string,
+    attribute: "name" | "property",
+    value: string,
+  ) {
+    const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const pattern = new RegExp(
       `<meta[^>]*${attribute}=["']${escaped}["'][^>]*content=["']([^"']+)["'][^>]*>`,
-      'i',
+      "i",
     );
-    return normalizeNullableText(this.stripHtml(html.match(pattern)?.[1] ?? ''));
+    return normalizeNullableText(
+      this.stripHtml(html.match(pattern)?.[1] ?? ""),
+    );
   }
 
-  private extractTagText(html: string, tag: 'title' | 'h1') {
-    const match = html.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
-    return normalizeNullableText(this.stripHtml(match?.[1] ?? ''));
+  private extractTagText(html: string, tag: "title" | "h1") {
+    const match = html.match(
+      new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"),
+    );
+    return normalizeNullableText(this.stripHtml(match?.[1] ?? ""));
   }
 
   private stripHtml(value: string) {
-    return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    return value
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   private unwrapDuckDuckGoUrl(value: string): string {
     try {
-      if (value.startsWith('//duckduckgo.com/l/?')) {
+      if (value.startsWith("//duckduckgo.com/l/?")) {
         const asUrl = new URL(`https:${value}`);
-        const uddg = asUrl.searchParams.get('uddg');
+        const uddg = asUrl.searchParams.get("uddg");
         if (uddg) {
           return decodeURIComponent(uddg);
         }
       }
 
-      if (value.startsWith('/l/?')) {
+      if (value.startsWith("/l/?")) {
         const asUrl = new URL(`https://duckduckgo.com${value}`);
-        const uddg = asUrl.searchParams.get('uddg');
+        const uddg = asUrl.searchParams.get("uddg");
         if (uddg) {
           return decodeURIComponent(uddg);
         }
