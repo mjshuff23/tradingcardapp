@@ -24,7 +24,8 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { Response } from "express";
-import type { Express } from "express";
+import { UploadedFile as UploadedImageFile } from "../common/uploaded-file.type";
+import { User } from "../prisma/client";
 import { CurrentUser } from "./current-user.decorator";
 import { AUTH_COOKIE_NAME } from "./auth.constants";
 import { AuthService } from "./auth.service";
@@ -33,7 +34,6 @@ import { SessionGuard } from "./session.guard";
 import { AuthSessionDto } from "./dto/auth-session.dto";
 import { LoginDto } from "./dto/login.dto";
 import { SignupDto } from "./dto/signup.dto";
-import { User } from "../prisma/client";
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -141,7 +141,7 @@ export class AuthController {
   @UseInterceptors(FileInterceptor("image"))
   async uploadProfileImage(
     @CurrentUser() user: User,
-    @UploadedFile() file: Express.Multer.File | undefined,
+    @UploadedFile() file: UploadedImageFile | undefined,
   ): Promise<AuthSessionDto> {
     if (!file) {
       throw new BadRequestException("Profile image is required.");

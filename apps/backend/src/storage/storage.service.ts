@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -10,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
+import { StorageTarget } from "./storage-ops.util";
 
 export type StoredImage = {
   originalKey: string;
@@ -21,14 +23,15 @@ export type StoredImageContent = {
   contentType: string;
 };
 
-type StorageTarget = "card" | "profile";
-
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
   private readonly s3Client: S3Client;
   private readonly profileBucket: string;
   private readonly cardBucket: string;
+  private readonly endpoint?: string;
+  private readonly region: string;
+  private readonly allowLocalFallback: boolean;
 
   constructor(private readonly configService: ConfigService) {
     const endpoint = this.configService.get<string>("S3_ENDPOINT") ?? undefined;
@@ -43,6 +46,9 @@ export class StorageService {
       this.configService.get<string>("S3_PROFILE_BUCKET") ?? defaultBucket;
     this.cardBucket =
       this.configService.get<string>("S3_CARD_BUCKET") ?? defaultBucket;
+    this.endpoint = endpoint;
+    this.region = region;
+    this.allowLocalFallback = this.shouldAllowLocalFallback(endpoint, region);
 
     this.s3Client = new S3Client({
       endpoint,
@@ -53,6 +59,18 @@ export class StorageService {
         secretAccessKey,
       },
     });
+  }
+
+  getStorageConfiguration() {
+    return {
+      endpoint: this.endpoint ?? null,
+      region: this.region,
+      allowLocalFallback: this.allowLocalFallback,
+      buckets: {
+        profile: this.profileBucket,
+        card: this.cardBucket,
+      },
+    };
   }
 
   async uploadScanImage(
@@ -127,6 +145,41 @@ export class StorageService {
     await this.deleteStoredImage(key, "profile");
   }
 
+  async objectExists(key: string, target: StorageTarget): Promise<boolean> {
+    if (!key) {
+      return false;
+    }
+
+    if (key.startsWith("local/")) {
+      const localRoot = path.resolve(process.cwd(), ".local-storage");
+      const relativePath = key.replace(/^local\//, "");
+      const filePath = path.join(localRoot, relativePath);
+
+      try {
+        await fs.access(filePath);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    try {
+      await this.s3Client.send(
+        new HeadObjectCommand({
+          Bucket: this.resolveBucket(target),
+          Key: key,
+        }),
+      );
+      return true;
+    } catch (error) {
+      if (this.isMissingObjectError(error)) {
+        return false;
+      }
+
+      throw error;
+    }
+  }
+
   private async uploadImageToBucket(input: {
     buffer: Buffer;
     sourceFilename: string;
@@ -172,6 +225,11 @@ export class StorageService {
       return { originalKey, thumbnailKey };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (!this.allowLocalFallback) {
+        this.logger.error(`S3 upload failed without local fallback: ${message}`);
+        throw error;
+      }
+
       this.logger.warn(
         `Falling back to local image storage because S3 upload failed: ${message}`,
       );
@@ -253,6 +311,50 @@ export class StorageService {
 
   private resolveBucket(target: StorageTarget) {
     return target === "profile" ? this.profileBucket : this.cardBucket;
+  }
+
+  private shouldAllowLocalFallback(
+    endpoint: string | undefined,
+    region: string,
+  ) {
+    if (!endpoint) {
+      return region === "garage";
+    }
+
+    try {
+      const url = new URL(endpoint);
+      return ["localhost", "127.0.0.1", "garage"].includes(url.hostname);
+    } catch {
+      return endpoint.includes("garage") || endpoint.includes("localhost");
+    }
+  }
+
+  private isMissingObjectError(error: unknown) {
+    const code =
+      typeof error === "object" && error !== null
+        ? String(
+            (error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } })
+              .Code ??
+              (error as { name?: string }).name ??
+              "",
+          )
+        : "";
+    const httpStatusCode =
+      typeof error === "object" &&
+      error !== null &&
+      "$metadata" in error &&
+      typeof (error as { $metadata?: { httpStatusCode?: number } }).$metadata
+        ?.httpStatusCode === "number"
+        ? (error as { $metadata?: { httpStatusCode?: number } }).$metadata
+            ?.httpStatusCode
+        : undefined;
+
+    return (
+      code === "NotFound" ||
+      code === "NoSuchKey" ||
+      code === "UnknownError" ||
+      httpStatusCode === 404
+    );
   }
 
   private getExtension(sourceFilename: string): string {

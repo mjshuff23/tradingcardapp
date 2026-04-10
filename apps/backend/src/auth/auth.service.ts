@@ -7,8 +7,8 @@ import {
 import * as argon2 from "argon2";
 import { randomBytes } from "node:crypto";
 import { Response } from "express";
-import type { Express } from "express";
 import { DEFAULT_LOCAL_USER } from "../common/catalog-normalization.util";
+import { UploadedFile } from "../common/uploaded-file.type";
 import { PrismaService } from "../prisma/prisma.service";
 import { User } from "../prisma/client";
 import { StorageService } from "../storage/storage.service";
@@ -135,7 +135,7 @@ export class AuthService {
     };
   }
 
-  async uploadProfileImage(userId: string, file: Express.Multer.File) {
+  async uploadProfileImage(userId: string, file: UploadedFile) {
     const storedImage = await this.storageService.uploadProfileImage(
       file.buffer,
       file.originalname,

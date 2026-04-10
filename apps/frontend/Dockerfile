@@ -11,4 +11,4 @@ COPY apps/frontend apps/frontend
 
 EXPOSE 3000
 
-CMD ["sh", "-lc", "cd /app && npm install -w apps/frontend && npm run dev -w apps/frontend -- --webpack --hostname 0.0.0.0 --port 3000"]
+CMD ["sh", "-lc", "cd /app && mkdir -p apps/frontend/.next/dev && rm -f apps/frontend/.next/dev/lock && npm install -w apps/frontend && npm run dev -w apps/frontend -- --webpack --hostname 0.0.0.0 --port 3000"]

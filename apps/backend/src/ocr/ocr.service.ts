@@ -25,6 +25,8 @@ export type OcrExtractResult = {
   frontText: string;
   backText: string;
   hints: StructuredCardHints;
+  provider: string;
+  usedFallback: boolean;
 };
 
 type OcrAttempt = {
@@ -42,19 +44,21 @@ export class OcrService implements OnModuleDestroy, OnModuleInit {
   constructor(private readonly configService: ConfigService) {}
 
   onModuleInit() {
-    const provider = (
+    this.logger.log(`Active OCR provider: ${this.getProviderName()}`);
+  }
+
+  getProviderName() {
+    return (
       this.configService.get<string>("OCR_PROVIDER") ?? "tesseract"
     ).toLowerCase();
-    this.logger.log(`Active OCR provider: ${provider}`);
   }
 
   async extractText(input: OcrExtractInput): Promise<OcrExtractResult> {
-    const provider = (
-      this.configService.get<string>("OCR_PROVIDER") ?? "tesseract"
-    ).toLowerCase();
+    const provider = this.getProviderName();
 
     if (provider !== "tesseract") {
       return this.fallbackResult(
+        provider,
         input.frontFilename,
         input.frontBuffer,
         input.backFilename,
@@ -83,11 +87,14 @@ export class OcrService implements OnModuleDestroy, OnModuleInit {
           frontText,
           backText,
           hints,
+          provider,
+          usedFallback: false,
         };
       }
 
       this.logger.warn("OCR returned empty text, using fallback text.");
       return this.fallbackResult(
+        provider,
         input.frontFilename,
         input.frontBuffer,
         input.backFilename,
@@ -98,6 +105,7 @@ export class OcrService implements OnModuleDestroy, OnModuleInit {
         `OCR failed, using fallback text. ${(error as Error).message}`,
       );
       return this.fallbackResult(
+        provider,
         input.frontFilename,
         input.frontBuffer,
         input.backFilename,
@@ -124,6 +132,7 @@ export class OcrService implements OnModuleDestroy, OnModuleInit {
   }
 
   private fallbackResult(
+    provider: string,
     frontFilename: string,
     frontBuffer: Buffer,
     backFilename?: string,
@@ -142,6 +151,8 @@ export class OcrService implements OnModuleDestroy, OnModuleInit {
       frontText: frontGuess,
       backText: backGuess,
       hints,
+      provider,
+      usedFallback: true,
     };
   }
 

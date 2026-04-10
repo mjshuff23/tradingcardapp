@@ -128,6 +128,11 @@ describe("ScanService ranking", () => {
         hint.title.toLowerCase().includes("wikipedia"),
       ),
     ).toBe(false);
+    expect(ranked[0].diagnostics.reference.source).toBe("catalog_card");
+    expect(ranked[0].diagnostics.ranking.numberBonus).toBeGreaterThan(0);
+    expect(ranked[0].diagnostics.validation.hintCount).toBeGreaterThanOrEqual(
+      2,
+    );
   });
 
   it("rewrites trusted ebay preview images through the local proxy endpoint", async () => {
@@ -153,5 +158,63 @@ describe("ScanService ranking", () => {
     expect(enriched[0].imageUrl).toBe(
       "/api/v1/scans/23/candidates/135/preview-image?hintUrl=https%3A%2F%2Fwww.ebay.com%2Fitm%2F327074734032",
     );
+  });
+
+  it("keeps ambiguous candidates in a moderate confidence range with diagnostics", () => {
+    const service = createService() as unknown as ScanService;
+    const ranked = service.rankCandidates(
+      {
+        text: "jordan spx basketball holo",
+        backText: "",
+        hints: {
+          years: [],
+          seasons: [],
+          cardNumbers: [],
+          brands: [],
+          subsets: ["spx"],
+        },
+        lookup: {
+          corpus: "",
+          hints: [],
+        },
+      },
+      [
+        {
+          name: "Michael Jordan",
+          set: "SPX Basketball",
+          setName: "SPX Basketball",
+          legacySetText: "SPX Basketball",
+          brand: "Upper Deck",
+          year: 1997,
+          season: null,
+          cardNumber: null,
+          player: "Michael Jordan",
+          variant: "Holo",
+          sport: "Basketball",
+          source: "catalog_card",
+          metadata: null,
+        },
+        {
+          name: "Michael Jordan",
+          set: "SPX Basketball",
+          setName: "SPX Basketball",
+          legacySetText: "SPX Basketball",
+          brand: "Upper Deck",
+          year: 1997,
+          season: null,
+          cardNumber: null,
+          player: "Michael Jordan",
+          variant: "Base",
+          sport: "Basketball",
+          source: "catalog_card",
+          metadata: null,
+        },
+      ],
+    );
+
+    expect(ranked[0].score).toBeGreaterThan(0.25);
+    expect(ranked[0].score).toBeLessThan(0.8);
+    expect(ranked[0].diagnostics.ranking.lookupBonus).toBe(0);
+    expect(ranked[0].diagnostics.validation.validationScore).toBeGreaterThan(0);
   });
 });

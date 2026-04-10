@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import type { Express } from "express";
 import { CatalogDraftInput } from "../common/catalog-normalization.util";
+import { UploadedFile } from "../common/uploaded-file.type";
 import { CollectionStatus, Prisma } from "../prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
@@ -351,7 +351,7 @@ export class CatalogService {
     cardId: number,
     userId: string,
     kind: "front" | "back" | "canonical",
-    file: Express.Multer.File,
+    file: UploadedFile,
   ): Promise<CardDetailDto> {
     const current = await this.findCardSource(userId, cardId);
     if (!current) {

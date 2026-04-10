@@ -103,6 +103,12 @@ Key variables:
 - `OCR_DEBUG` (`true` to log OCR worker progress)
 - `LOOKUP_PROVIDERS` (default `duckduckgo`; add `google_vision` only if you want cloud reverse image lookup)
 - `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_PROFILE_BUCKET`, `S3_CARD_BUCKET`, `S3_REGION`
+- `SOURCE_S3_ENDPOINT`, `SOURCE_S3_ACCESS_KEY`, `SOURCE_S3_SECRET_KEY`, `SOURCE_S3_PROFILE_BUCKET`, `SOURCE_S3_CARD_BUCKET`, `SOURCE_S3_REGION` for best-effort migration into the target S3 buckets
+
+Storage operations:
+
+- `npm run storage:verify -w apps/backend` checks image-bearing rows across `User`, `ScanJob`, `UserCard`, `UserWishlist`, and `CardDefinition` against the configured target storage and reports grouped counts for present, missing, skipped-http, and skipped-local objects.
+- `npm run storage:migrate:s3 -w apps/backend` copies object-key media from `SOURCE_S3_*` storage into the configured target `S3_*` buckets without rewriting database rows. Legacy HTTP URLs and `local/*` paths are skipped.
 
 Auth behavior:
 

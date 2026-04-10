@@ -194,6 +194,15 @@ Backend env wiring for AWS-compatible storage:
 - `S3_SECRET_KEY`
 - `S3_REGION`
 
+Operational scripts for media cutover:
+
+```bash
+npm run storage:verify -w apps/backend
+npm run storage:migrate:s3 -w apps/backend
+```
+
+Migration uses the configured target `S3_*` variables and optional `SOURCE_S3_*` variables for the current source storage. Object keys are preserved exactly; legacy HTTP URLs and `local/*` paths are skipped.
+
 ## Notes
 
 - OCR defaults to `tesseract` in backend (`OCR_PROVIDER=tesseract`) with fallback mode available via `OCR_PROVIDER=stub`.

@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
+import sharp from "sharp";
 import { CollectionStatus, Prisma } from "../prisma/client";
 import { buildCardKey } from "../common/card-key.util";
 import { StructuredCardHints } from "../common/card-hints.util";
@@ -27,6 +28,15 @@ import { CatalogIndexService } from "../catalog/catalog-index.service";
 import { TitleNormalizationService } from "../catalog/title-normalization.service";
 import { ConfirmScanDto } from "./dto/confirm-scan.dto";
 import { LinkPreviewService } from "./link-preview.service";
+import {
+  computeImageQualityFromSignals,
+  computeOverallQuality,
+  computePersistedConfidence,
+  ScanCandidateDiagnostics,
+  ScanJobDiagnostics,
+  toStructuredHintCounts,
+  totalStructuredHintCount,
+} from "./scan-diagnostics.util";
 
 type CandidateReference = {
   name: string;
@@ -42,6 +52,21 @@ type CandidateReference = {
   sport: string | null;
   source: string;
   metadata?: Prisma.JsonValue | null;
+};
+
+type RankedCandidate = CandidateReference & {
+  score: number;
+  validationScore: number | null;
+  sourceHints: SourceHint[];
+  diagnostics: ScanCandidateDiagnostics;
+};
+
+type ImageSignalSnapshot = {
+  width: number | null;
+  height: number | null;
+  blurProxy: number | null;
+  exposureMean: number | null;
+  exposureStdDev: number | null;
 };
 
 const CARD_BRAND_KEYWORDS = [
@@ -374,12 +399,23 @@ export class ScanService {
       });
     }
 
-    const confidence = Number(
-      (
-        (selectedCandidate.score + (selectedCandidate.validationScore ?? 0)) /
-        2
-      ).toFixed(3),
-    );
+    const scanDiagnostics = this.parseScanJobDiagnostics(scanJob.diagnostics);
+    const structuredHintCounts =
+      scanDiagnostics?.ocr.structuredHintCounts ?? {
+        years: 0,
+        seasons: 0,
+        cardNumbers: 0,
+        brands: 0,
+        subsets: 0,
+      };
+    const confidence = computePersistedConfidence({
+      score: selectedCandidate.score,
+      validationScore: selectedCandidate.validationScore,
+      overallQuality: scanDiagnostics?.quality.overall ?? 1,
+      frontTextLength: scanDiagnostics?.ocr.frontTextLength ?? 0,
+      backTextLength: scanDiagnostics?.ocr.backTextLength ?? 0,
+      structuredHintCounts,
+    });
 
     await this.prisma.scanCandidate.updateMany({
       where: { scanJobId: scanId },
@@ -498,23 +534,79 @@ export class ScanService {
       data: { status: "PROCESSING" },
     });
 
+    const startedAt = Date.now();
+    const timingsMs: ScanJobDiagnostics["timingsMs"] = {
+      ocr: 0,
+      lookup: 0,
+      rank: 0,
+      total: 0,
+    };
+    const lookupProvidersUsed = this.lookupService.getActiveProviders();
+    let failedStage: string | null = null;
+    let ocrResult: Awaited<ReturnType<OcrService["extractText"]>> | null = null;
+    let lookup: {
+      corpus: string;
+      hints: SourceHint[];
+    } = {
+      corpus: "",
+      hints: [],
+    };
+    let frontQuality = this.buildEmptyImageQuality();
+    let backQuality = input.backBuffer ? this.buildEmptyImageQuality() : null;
+    let candidates: RankedCandidate[] = [];
+
     try {
-      const ocrResult = await this.ocrService.extractText({
+      failedStage = "ocr";
+      const ocrStartedAt = Date.now();
+      ocrResult = await this.ocrService.extractText({
         frontBuffer: input.frontBuffer,
         frontFilename: input.frontFilename,
         backBuffer: input.backBuffer,
         backFilename: input.backFilename,
       });
+      timingsMs.ocr = Date.now() - ocrStartedAt;
 
-      const lookup = await this.lookupService.lookup({
+      failedStage = "quality";
+      const structuredHintCounts = toStructuredHintCounts(ocrResult.hints);
+      const effectiveFrontTextLength = ocrResult.usedFallback
+        ? 0
+        : ocrResult.frontText.length;
+      const effectiveBackTextLength = ocrResult.usedFallback
+        ? 0
+        : ocrResult.backText.length;
+      const effectiveStructuredHintCount = ocrResult.usedFallback
+        ? 0
+        : totalStructuredHintCount(structuredHintCounts);
+
+      [frontQuality, backQuality] = await Promise.all([
+        this.assessImageQuality(
+          input.frontBuffer,
+          effectiveFrontTextLength,
+          effectiveStructuredHintCount,
+        ),
+        input.backBuffer
+          ? this.assessImageQuality(
+              input.backBuffer,
+              effectiveBackTextLength,
+              effectiveStructuredHintCount,
+            )
+          : Promise.resolve(null),
+      ]);
+
+      failedStage = "lookup";
+      const lookupStartedAt = Date.now();
+      lookup = await this.lookupService.lookup({
         frontBuffer: input.frontBuffer,
         backBuffer: input.backBuffer,
         ocrText: ocrResult.text,
         hints: ocrResult.hints,
       });
+      timingsMs.lookup = Date.now() - lookupStartedAt;
 
+      failedStage = "rank";
+      const rankStartedAt = Date.now();
       const references = await this.loadCandidateReferences();
-      const candidates = this.rankCandidates(
+      candidates = this.rankCandidates(
         {
           text: ocrResult.text,
           backText: ocrResult.backText,
@@ -523,7 +615,20 @@ export class ScanService {
         },
         references,
       ).slice(0, 8);
+      timingsMs.rank = Date.now() - rankStartedAt;
+      timingsMs.total = Date.now() - startedAt;
 
+      const diagnostics = this.buildScanJobDiagnostics({
+        frontQuality,
+        backQuality,
+        ocrResult,
+        lookup,
+        lookupProvidersUsed,
+        timingsMs,
+        failedStage: null,
+      });
+
+      failedStage = "persist";
       await this.prisma.$transaction([
         this.prisma.scanCandidate.deleteMany({ where: { scanJobId: scanId } }),
         ...candidates.map((candidate) =>
@@ -544,6 +649,8 @@ export class ScanService {
               score: candidate.score,
               validationScore: candidate.validationScore,
               sourceHints: candidate.sourceHints as unknown as Prisma.JsonArray,
+              diagnostics:
+                candidate.diagnostics as unknown as Prisma.InputJsonValue,
             },
           }),
         ),
@@ -552,18 +659,30 @@ export class ScanService {
           data: {
             status: "NEEDS_REVIEW",
             ocrText: ocrResult.text,
+            diagnostics: diagnostics as unknown as Prisma.InputJsonValue,
             error: null,
           },
         }),
       ]);
     } catch (error) {
+      timingsMs.total = Date.now() - startedAt;
       this.logger.error(
         `Failed processing scan ${scanId}: ${(error as Error).message}`,
       );
+      const diagnostics = this.buildScanJobDiagnostics({
+        frontQuality,
+        backQuality,
+        ocrResult,
+        lookup,
+        lookupProvidersUsed,
+        timingsMs,
+        failedStage,
+      });
       await this.prisma.scanJob.update({
         where: { id: scanId },
         data: {
           status: "FAILED",
+          diagnostics: diagnostics as unknown as Prisma.InputJsonValue,
           error: (error as Error).message,
         },
       });
@@ -660,18 +779,42 @@ export class ScanService {
         {
           name: ocrText || "Unknown Card",
           set: null,
-          year: null,
-          player: null,
-          variant: null,
-          sport: null,
-          score: 0.15,
-          validationScore: fallbackValidation.validationScore,
-          sourceHints: fallbackValidation.sourceHints,
           setName: null,
           legacySetText: null,
           brand: null,
+          year: null,
           season: null,
           cardNumber: null,
+          player: null,
+          variant: null,
+          sport: null,
+          source: "ocr_fallback",
+          metadata: null,
+          score: 0.15,
+          validationScore: fallbackValidation.validationScore,
+          sourceHints: fallbackValidation.sourceHints,
+          diagnostics: {
+            reference: {
+              source: "ocr_fallback",
+              fromDefinitionId: null,
+            },
+            ranking: {
+              coverage: 0,
+              overlap: 0,
+              fuzzy: 0,
+              yearBonus: 0,
+              playerBonus: 0,
+              playerLockBonus: 0,
+              setBonus: 0,
+              numberBonus: 0,
+              lookupBonus: 0,
+              finalScore: 0.15,
+            },
+            validation: {
+              validationScore: fallbackValidation.validationScore,
+              hintCount: fallbackValidation.sourceHints.length,
+            },
+          },
         },
       ];
     }
@@ -753,12 +896,43 @@ export class ScanService {
           searchable,
           lookupHints,
         );
+        const fromDefinitionId =
+          reference.metadata &&
+          typeof reference.metadata === "object" &&
+          !Array.isArray(reference.metadata) &&
+          "fromDefinitionId" in reference.metadata &&
+          typeof reference.metadata.fromDefinitionId === "string"
+            ? reference.metadata.fromDefinitionId
+            : null;
 
         return {
           ...reference,
           score,
           validationScore: validation.validationScore,
           sourceHints: [...validation.sourceHints, ...matchedLookupHints],
+          diagnostics: {
+            reference: {
+              source: reference.source,
+              fromDefinitionId,
+            },
+            ranking: {
+              coverage: Number(coverage.toFixed(3)),
+              overlap: Number(overlap.toFixed(3)),
+              fuzzy: Number(fuzzy.toFixed(3)),
+              yearBonus,
+              playerBonus,
+              playerLockBonus,
+              setBonus,
+              numberBonus,
+              lookupBonus,
+              finalScore: score,
+            },
+            validation: {
+              validationScore: validation.validationScore,
+              hintCount:
+                validation.sourceHints.length + matchedLookupHints.length,
+            },
+          },
         };
       })
       .sort((a, b) => {
@@ -771,6 +945,162 @@ export class ScanService {
 
     const playerFiltered = this.filterByLockedPlayer(ranked, lockedPlayer);
     return this.trimLowConfidenceTail(playerFiltered);
+  }
+
+  private buildEmptyImageQuality() {
+    return computeImageQualityFromSignals({
+      width: null,
+      height: null,
+      blurProxy: null,
+      exposureMean: null,
+      exposureStdDev: null,
+      ocrTextLength: 0,
+      structuredHintCount: 0,
+    });
+  }
+
+  private async assessImageQuality(
+    buffer: Buffer,
+    ocrTextLength: number,
+    structuredHintCount: number,
+  ) {
+    const signals = await this.extractImageSignals(buffer);
+    return computeImageQualityFromSignals({
+      ...signals,
+      ocrTextLength,
+      structuredHintCount,
+    });
+  }
+
+  private async extractImageSignals(
+    buffer: Buffer,
+  ): Promise<ImageSignalSnapshot> {
+    const rotated = sharp(buffer).rotate();
+    const [metadata, stats, raw] = await Promise.all([
+      rotated.metadata(),
+      rotated.clone().greyscale().stats(),
+      rotated
+        .clone()
+        .resize({
+          width: 256,
+          height: 256,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .greyscale()
+        .raw()
+        .toBuffer({ resolveWithObject: true }),
+    ]);
+    const channel = stats.channels[0];
+
+    return {
+      width: metadata.width ?? null,
+      height: metadata.height ?? null,
+      blurProxy: this.computeBlurProxy(
+        raw.data,
+        raw.info.width,
+        raw.info.height,
+      ),
+      exposureMean:
+        typeof channel?.mean === "number" ? channel.mean : null,
+      exposureStdDev:
+        typeof channel?.stdev === "number" ? channel.stdev : null,
+    };
+  }
+
+  private computeBlurProxy(data: Buffer, width: number, height: number) {
+    if (width < 2 || height < 2) {
+      return 0;
+    }
+
+    let totalDifference = 0;
+    let sampleCount = 0;
+
+    for (let y = 1; y < height; y += 1) {
+      for (let x = 1; x < width; x += 1) {
+        const index = y * width + x;
+        totalDifference += Math.abs(data[index] - data[index - 1]);
+        totalDifference += Math.abs(data[index] - data[index - width]);
+        sampleCount += 2;
+      }
+    }
+
+    if (!sampleCount) {
+      return 0;
+    }
+
+    return Number((totalDifference / sampleCount).toFixed(3));
+  }
+
+  private buildScanJobDiagnostics(input: {
+    frontQuality: ReturnType<ScanService["buildEmptyImageQuality"]>;
+    backQuality: ReturnType<ScanService["buildEmptyImageQuality"]> | null;
+    ocrResult: Awaited<ReturnType<OcrService["extractText"]>> | null;
+    lookup: {
+      corpus: string;
+      hints: SourceHint[];
+    };
+    lookupProvidersUsed: string[];
+    timingsMs: ScanJobDiagnostics["timingsMs"];
+    failedStage: string | null;
+  }): ScanJobDiagnostics {
+    const structuredHintCounts = input.ocrResult
+      ? toStructuredHintCounts(input.ocrResult.hints)
+      : {
+          years: 0,
+          seasons: 0,
+          cardNumbers: 0,
+          brands: 0,
+          subsets: 0,
+        };
+    const overallQuality = computeOverallQuality(
+      input.frontQuality,
+      input.backQuality,
+    );
+
+    return {
+      quality: {
+        front: input.frontQuality,
+        back: input.backQuality,
+        overall: overallQuality,
+        reasons: Array.from(
+          new Set([
+            ...input.frontQuality.reasons,
+            ...(input.backQuality?.reasons ?? []),
+          ]),
+        ),
+        checks: {
+          hasBackImage: Boolean(input.backQuality),
+          totalOcrTextLength:
+            (input.ocrResult?.frontText.length ?? 0) +
+            (input.ocrResult?.backText.length ?? 0),
+          structuredHintCounts,
+        },
+      },
+      ocr: {
+        frontTextLength: input.ocrResult?.frontText.length ?? 0,
+        backTextLength: input.ocrResult?.backText.length ?? 0,
+        structuredHintCounts,
+        provider: input.ocrResult?.provider ?? this.ocrService.getProviderName(),
+        usedFallback: input.ocrResult?.usedFallback ?? false,
+      },
+      lookup: {
+        providersUsed: input.lookupProvidersUsed,
+        hintCount: input.lookup.hints.length,
+      },
+      timingsMs: input.timingsMs,
+      failedStage: input.failedStage,
+    };
+  }
+
+  private parseScanJobDiagnostics(
+    value: Prisma.JsonValue | null | undefined,
+  ): ScanJobDiagnostics | null {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+
+    return value as unknown as ScanJobDiagnostics;
   }
 
   private computeYearBonus(

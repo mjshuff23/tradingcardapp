@@ -67,6 +67,9 @@ export class ScanCandidateDto {
   @ApiProperty({ type: [ValidationHintDto], nullable: true })
   sourceHints!: ValidationHintDto[] | null;
 
+  @ApiPropertyOptional({ type: Object, nullable: true })
+  diagnostics?: Record<string, unknown> | null;
+
   @ApiProperty()
   chosen!: boolean;
 }
@@ -86,6 +89,9 @@ export class ScanResponseDto {
 
   @ApiProperty({ nullable: true })
   error!: string | null;
+
+  @ApiPropertyOptional({ type: Object, nullable: true })
+  diagnostics?: Record<string, unknown> | null;
 
   @ApiProperty({ nullable: true })
   frontImageUrl!: string | null;

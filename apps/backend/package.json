@@ -21,6 +21,8 @@
     "db:catalog:import": "tsx prisma/import-catalog.ts",
     "db:railway:inspect": "tsx prisma/railway-inspect.ts",
     "db:railway:mark-applied": "tsx prisma/mark-migrations-applied.ts",
+    "storage:verify": "tsx prisma/storage-verify.ts",
+    "storage:migrate:s3": "tsx prisma/storage-migrate-s3.ts",
     "db:seed": "prisma db seed",
     "db:prepare": "node prisma/prepare.js",
     "refresh:docker:backend": "npm --prefix ../.. run refresh:docker:backend",
@@ -54,6 +56,7 @@
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
+    "@angular-devkit/schematics": "^21.2.7",
     "@nestjs/cli": "^11.0.18",
     "@nestjs/schematics": "^11.0.9",
     "@nestjs/testing": "^11.1.13",

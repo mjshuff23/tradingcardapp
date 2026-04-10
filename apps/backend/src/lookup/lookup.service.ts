@@ -26,12 +26,16 @@ export class LookupService implements OnModuleInit {
 
   onModuleInit() {
     this.logger.log(
-      `Active lookup providers: ${this.getProviders().join(", ") || "none"}`,
+      `Active lookup providers: ${this.getActiveProviders().join(", ") || "none"}`,
     );
   }
 
+  getActiveProviders(): string[] {
+    return this.getProviders();
+  }
+
   async lookup(input: LookupInput): Promise<LookupResult> {
-    const providers = this.getProviders();
+    const providers = this.getActiveProviders();
     if (!providers.length) {
       return { corpus: "", hints: [] };
     }

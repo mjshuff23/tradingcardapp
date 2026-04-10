@@ -28,11 +28,11 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { Response } from "express";
-import type { Express } from "express";
 import { AuthService } from "../auth/auth.service";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { RequireSessionGuard } from "../auth/require-session.guard";
 import { SessionGuard } from "../auth/session.guard";
+import { UploadedFile as UploadedImageFile } from "../common/uploaded-file.type";
 import { User } from "../prisma/client";
 import { CatalogService } from "./catalog.service";
 import { CardDetailDto, CatalogListResponseDto } from "./dto/card-response.dto";
@@ -197,7 +197,7 @@ export class CatalogController {
     @Param("cardId", ParseIntPipe) cardId: number,
     @Param("kind") kind: string,
     @CurrentUser() user: User,
-    @UploadedFile() file: Express.Multer.File | undefined,
+    @UploadedFile() file: UploadedImageFile | undefined,
   ) {
     if (!file) {
       throw new BadRequestException("Image file is required.");
