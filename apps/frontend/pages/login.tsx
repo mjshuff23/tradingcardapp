@@ -69,7 +69,9 @@ export default function LoginPage() {
               <input
                 className={inputClass}
                 id="email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 required
@@ -83,10 +85,11 @@ export default function LoginPage() {
               <input
                 className={inputClass}
                 id="password"
+                name="password"
                 type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                minLength={8}
                 required
               />
             </div>

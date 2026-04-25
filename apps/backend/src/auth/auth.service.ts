@@ -25,11 +25,9 @@ export class AuthService {
   ) {}
 
   async signup(dto: SignupDto) {
-    const email = dto.email.trim().toLowerCase();
-    const username = dto.username.trim();
     const existing = await this.prisma.user.findFirst({
       where: {
-        OR: [{ email }, { username }],
+        OR: [{ email: dto.email }, { username: dto.username }],
       },
     });
 
@@ -42,17 +40,16 @@ export class AuthService {
     const passwordHash = await argon2.hash(dto.password);
     return this.prisma.user.create({
       data: {
-        email,
-        username,
+        email: dto.email,
+        username: dto.username,
         passwordHash,
       },
     });
   }
 
   async login(dto: LoginDto) {
-    const email = dto.email.trim().toLowerCase();
     const user = await this.prisma.user.findUnique({
-      where: { email },
+      where: { email: dto.email },
     });
 
     if (!user) {
