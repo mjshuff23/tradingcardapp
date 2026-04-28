@@ -40,6 +40,8 @@ crash.log
 Thumbs.db
 project-dump.txt
 apps/backend/.local-storage/
+apps/backend/prisma/seed-data/tcdb-browser-profile/
+apps/backend/prisma/seed-data/tcdb-storage-state.json
 apps/backend/src/generated/
 
 # IDE
