@@ -1,7 +1,12 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { AUTH_COOKIE_NAME } from './auth.constants';
-import { AuthenticatedRequest } from './authenticated-request.type';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
+import { AuthService } from "./auth.service";
+import { AUTH_COOKIE_NAME } from "./auth.constants";
+import { AuthenticatedRequest } from "./authenticated-request.type";
 
 @Injectable()
 export class RequireSessionGuard implements CanActivate {
@@ -13,12 +18,12 @@ export class RequireSessionGuard implements CanActivate {
     request.sessionToken = sessionToken ?? null;
 
     if (!sessionToken) {
-      throw new UnauthorizedException('Sign in required.');
+      throw new UnauthorizedException("Sign in required.");
     }
 
     const user = await this.authService.findUserBySessionToken(sessionToken);
     if (!user) {
-      throw new UnauthorizedException('Session expired. Please sign in again.');
+      throw new UnauthorizedException("Session expired. Please sign in again.");
     }
 
     request.currentUser = user;

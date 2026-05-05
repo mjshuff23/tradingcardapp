@@ -1,10 +1,10 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import { CollectionStatus } from '../prisma/client';
-import { parseCsv } from '../common/csv.util';
-import { UploadedFile } from '../common/uploaded-file.type';
-import { PrismaService } from '../prisma/prisma.service';
-import { StorageService } from '../storage/storage.service';
-import { CatalogIndexService } from '../catalog/catalog-index.service';
+import { BadRequestException, Injectable } from "@nestjs/common";
+import { CollectionStatus } from "../prisma/client";
+import { parseCsv } from "../common/csv.util";
+import { UploadedFile } from "../common/uploaded-file.type";
+import { PrismaService } from "../prisma/prisma.service";
+import { StorageService } from "../storage/storage.service";
+import { CatalogIndexService } from "../catalog/catalog-index.service";
 
 type ImportError = {
   row: number;
@@ -21,17 +21,17 @@ export class ImportService {
 
   async importCardsCsv(file: UploadedFile, userId: string) {
     if (!file || !file.buffer) {
-      throw new BadRequestException('CSV file is required.');
+      throw new BadRequestException("CSV file is required.");
     }
 
     const importJob = await this.prisma.importJob.create({
       data: {
         filename: file.originalname,
-        status: 'PROCESSING',
+        status: "PROCESSING",
       },
     });
 
-    const rows = parseCsv(file.buffer.toString('utf8'));
+    const rows = parseCsv(file.buffer.toString("utf8"));
     let createdCount = 0;
     let updatedCount = 0;
     let skippedCount = 0;
@@ -41,10 +41,13 @@ export class ImportService {
       const rowNumber = i + 2;
       const row = rows[i];
 
-      const name = (row.name || row.card || '').trim();
+      const name = (row.name || row.card || "").trim();
       if (!name) {
         skippedCount += 1;
-        errors.push({ row: rowNumber, message: 'Missing name/card column value.' });
+        errors.push({
+          row: rowNumber,
+          message: "Missing name/card column value.",
+        });
         continue;
       }
 
@@ -53,38 +56,43 @@ export class ImportService {
       const variant = row.variant?.trim() || null;
       const sport = row.sport?.trim() || null;
       const year = row.year ? Number(row.year) || null : null;
-      const importImageUrl = row.imageUrl?.trim() || row.image_url?.trim() || null;
+      const importImageUrl =
+        row.imageUrl?.trim() || row.image_url?.trim() || null;
       const gradeEstimate = row.gradeEstimate?.trim() || null;
       const collectionStatus =
-        row.collectionStatus === 'WANTED' ? CollectionStatus.WANTED : CollectionStatus.OWNED;
+        row.collectionStatus === "WANTED"
+          ? CollectionStatus.WANTED
+          : CollectionStatus.OWNED;
 
       try {
         const importedImage = importImageUrl
           ? await this.importImageFromUrl(importImageUrl)
           : null;
 
-        const { cardDefinition } = await this.catalogIndexService.upsertCatalogNodes({
-          name,
-          set,
-          year,
-          player,
-          variant,
-          sport,
-        });
+        const { cardDefinition } =
+          await this.catalogIndexService.upsertCatalogNodes({
+            name,
+            set,
+            year,
+            player,
+            variant,
+            sport,
+          });
 
-        const summary = collectionStatus === CollectionStatus.WANTED
-          ? await this.upsertWishlistRecord({
-              userId,
-              cardDefinitionId: cardDefinition.id,
-              gradeEstimate,
-              importedImage,
-            })
-          : await this.upsertOwnedRecord({
-              userId,
-              cardDefinitionId: cardDefinition.id,
-              gradeEstimate,
-              importedImage,
-            });
+        const summary =
+          collectionStatus === CollectionStatus.WANTED
+            ? await this.upsertWishlistRecord({
+                userId,
+                cardDefinitionId: cardDefinition.id,
+                gradeEstimate,
+                importedImage,
+              })
+            : await this.upsertOwnedRecord({
+                userId,
+                cardDefinitionId: cardDefinition.id,
+                gradeEstimate,
+                importedImage,
+              });
 
         createdCount += summary.created ? 1 : 0;
         updatedCount += summary.created ? 0 : 1;
@@ -102,7 +110,7 @@ export class ImportService {
     const finalizedJob = await this.prisma.importJob.update({
       where: { id: importJob.id },
       data: {
-        status: errorCount > 0 ? 'FAILED' : 'COMPLETED',
+        status: errorCount > 0 ? "FAILED" : "COMPLETED",
         totalRows: rows.length,
         createdCount,
         updatedCount,
@@ -146,11 +154,16 @@ export class ImportService {
             id: existingWishlist.id,
             userId: existingWishlist.userId,
             cardDefinitionId: input.cardDefinitionId,
-            imageUrl: input.importedImage?.thumbnailKey ?? existingWishlist.imageUrl,
-            originalImageKey: input.importedImage?.originalKey ?? existingWishlist.originalImageKey,
+            imageUrl:
+              input.importedImage?.thumbnailKey ?? existingWishlist.imageUrl,
+            originalImageKey:
+              input.importedImage?.originalKey ??
+              existingWishlist.originalImageKey,
             thumbnailImageKey:
-              input.importedImage?.thumbnailKey ?? existingWishlist.thumbnailImageKey,
-            gradeEstimate: input.gradeEstimate ?? existingWishlist.gradeEstimate,
+              input.importedImage?.thumbnailKey ??
+              existingWishlist.thumbnailImageKey,
+            gradeEstimate:
+              input.gradeEstimate ?? existingWishlist.gradeEstimate,
             confidence: existingWishlist.confidence,
             scanJobId: existingWishlist.scanJobId,
             notes: existingWishlist.notes,
@@ -169,7 +182,7 @@ export class ImportService {
         userId: input.userId,
         cardDefinitionId: input.cardDefinitionId,
       },
-      orderBy: { id: 'asc' },
+      orderBy: { id: "asc" },
     });
 
     if (existingOwned) {
@@ -177,8 +190,11 @@ export class ImportService {
         where: { id: existingOwned.id },
         data: {
           imageUrl: input.importedImage?.thumbnailKey ?? existingOwned.imageUrl,
-          originalImageKey: input.importedImage?.originalKey ?? existingOwned.originalImageKey,
-          thumbnailImageKey: input.importedImage?.thumbnailKey ?? existingOwned.thumbnailImageKey,
+          originalImageKey:
+            input.importedImage?.originalKey ?? existingOwned.originalImageKey,
+          thumbnailImageKey:
+            input.importedImage?.thumbnailKey ??
+            existingOwned.thumbnailImageKey,
           gradeEstimate: input.gradeEstimate ?? existingOwned.gradeEstimate,
         },
       });
@@ -211,7 +227,7 @@ export class ImportService {
         userId: input.userId,
         cardDefinitionId: input.cardDefinitionId,
       },
-      orderBy: { id: 'asc' },
+      orderBy: { id: "asc" },
     });
 
     if (existingOwned) {
@@ -234,10 +250,14 @@ export class ImportService {
             id: existingOwned.id,
             userId: existingOwned.userId,
             cardDefinitionId: input.cardDefinitionId,
-            imageUrl: input.importedImage?.thumbnailKey ?? existingOwned.imageUrl,
-            originalImageKey: input.importedImage?.originalKey ?? existingOwned.originalImageKey,
+            imageUrl:
+              input.importedImage?.thumbnailKey ?? existingOwned.imageUrl,
+            originalImageKey:
+              input.importedImage?.originalKey ??
+              existingOwned.originalImageKey,
             thumbnailImageKey:
-              input.importedImage?.thumbnailKey ?? existingOwned.thumbnailImageKey,
+              input.importedImage?.thumbnailKey ??
+              existingOwned.thumbnailImageKey,
             gradeEstimate: input.gradeEstimate ?? existingOwned.gradeEstimate,
             confidence: existingOwned.confidence,
             scanJobId: existingOwned.scanJobId,
@@ -266,10 +286,14 @@ export class ImportService {
       await this.prisma.userWishlist.update({
         where: { id: existingWishlist.id },
         data: {
-          imageUrl: input.importedImage?.thumbnailKey ?? existingWishlist.imageUrl,
-          originalImageKey: input.importedImage?.originalKey ?? existingWishlist.originalImageKey,
+          imageUrl:
+            input.importedImage?.thumbnailKey ?? existingWishlist.imageUrl,
+          originalImageKey:
+            input.importedImage?.originalKey ??
+            existingWishlist.originalImageKey,
           thumbnailImageKey:
-            input.importedImage?.thumbnailKey ?? existingWishlist.thumbnailImageKey,
+            input.importedImage?.thumbnailKey ??
+            existingWishlist.thumbnailImageKey,
           gradeEstimate: input.gradeEstimate ?? existingWishlist.gradeEstimate,
         },
       });
@@ -299,8 +323,8 @@ export class ImportService {
       const response = await fetch(imageUrl, {
         signal: controller.signal,
         headers: {
-          'User-Agent':
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36',
+          "User-Agent":
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
         },
       });
 
@@ -308,8 +332,8 @@ export class ImportService {
         return null;
       }
 
-      const contentType = response.headers.get('content-type') ?? '';
-      if (!contentType.startsWith('image/')) {
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.startsWith("image/")) {
         return null;
       }
 
@@ -319,7 +343,10 @@ export class ImportService {
       }
 
       const derivedFilename = this.filenameFromUrl(imageUrl, contentType);
-      return this.storageService.uploadScanImage(Buffer.from(bytes), derivedFilename);
+      return this.storageService.uploadScanImage(
+        Buffer.from(bytes),
+        derivedFilename,
+      );
     } catch {
       return null;
     } finally {
@@ -330,21 +357,21 @@ export class ImportService {
   private filenameFromUrl(imageUrl: string, contentType: string): string {
     try {
       const url = new URL(imageUrl);
-      const pathname = url.pathname.split('/').filter(Boolean);
-      const basename = pathname[pathname.length - 1] || 'import-image';
-      if (basename.includes('.')) {
+      const pathname = url.pathname.split("/").filter(Boolean);
+      const basename = pathname[pathname.length - 1] || "import-image";
+      if (basename.includes(".")) {
         return basename;
       }
     } catch {
       // fall through
     }
 
-    if (contentType.includes('png')) {
-      return 'import-image.png';
+    if (contentType.includes("png")) {
+      return "import-image.png";
     }
-    if (contentType.includes('webp')) {
-      return 'import-image.webp';
+    if (contentType.includes("webp")) {
+      return "import-image.webp";
     }
-    return 'import-image.jpg';
+    return "import-image.jpg";
   }
 }

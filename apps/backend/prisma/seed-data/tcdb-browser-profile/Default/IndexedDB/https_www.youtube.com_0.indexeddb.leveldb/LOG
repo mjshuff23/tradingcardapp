@@ -1,0 +1,2 @@
+2026/04/11-06:36:21.611 8ddd Creating DB /home/yokito/projects/trading-card-app/apps/backend/prisma/seed-data/tcdb-browser-profile/Default/IndexedDB/https_www.youtube.com_0.indexeddb.leveldb since it was missing.
+2026/04/11-06:36:21.616 8ddd Reusing MANIFEST /home/yokito/projects/trading-card-app/apps/backend/prisma/seed-data/tcdb-browser-profile/Default/IndexedDB/https_www.youtube.com_0.indexeddb.leveldb/MANIFEST-000001

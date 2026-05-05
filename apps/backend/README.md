@@ -103,6 +103,12 @@ Key variables:
 - `OCR_DEBUG` (`true` to log OCR worker progress)
 - `LOOKUP_PROVIDERS` (default `duckduckgo`; add `google_vision` only if you want cloud reverse image lookup)
 - `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_PROFILE_BUCKET`, `S3_CARD_BUCKET`, `S3_REGION`
+- `SOURCE_S3_ENDPOINT`, `SOURCE_S3_ACCESS_KEY`, `SOURCE_S3_SECRET_KEY`, `SOURCE_S3_PROFILE_BUCKET`, `SOURCE_S3_CARD_BUCKET`, `SOURCE_S3_REGION` for best-effort migration into the target S3 buckets
+
+Storage operations:
+
+- `npm run storage:verify -w apps/backend` checks image-bearing rows across `User`, `ScanJob`, `UserCard`, `UserWishlist`, and `CardDefinition` against the configured target storage and reports grouped counts for present, missing, skipped-http, and skipped-local objects.
+- `npm run storage:migrate:s3 -w apps/backend` copies object-key media from `SOURCE_S3_*` storage into the configured target `S3_*` buckets without rewriting database rows. Legacy HTTP URLs and `local/*` paths are skipped.
 
 Auth behavior:
 
@@ -156,7 +162,29 @@ npm run db:migrate -w apps/backend
 npm run db:seed -w apps/backend
 ```
 
-If a hosted PostgreSQL database already has tables and `start:prod` fails with Prisma `P3005`, set `PRISMA_BASELINE_ON_P3005=true` for one deployment. The production bootstrap will only mark migrations as applied when the live database already matches `prisma/schema.prisma`. Remove the flag after the baseline succeeds.
+Hosted / Railway rescue now uses explicit commands instead of hidden startup baseline logic.
+
+Inspect the target database:
+
+```bash
+TARGET_DATABASE_URL="postgres://..." npm run db:railway:inspect -w apps/backend
+```
+
+If the target still contains the legacy `Card` table, export catalog data, migrate a clean database, then import:
+
+```bash
+TARGET_DATABASE_URL="postgres://legacy-db" npm run db:catalog:export -w apps/backend
+TARGET_DATABASE_URL="postgres://clean-db" npm exec -w apps/backend prisma migrate deploy
+TARGET_DATABASE_URL="postgres://clean-db" npm run db:catalog:import -w apps/backend
+```
+
+If the target already matches the current normalized schema and only lacks `_prisma_migrations`, mark the migrations as applied once:
+
+```bash
+TARGET_DATABASE_URL="postgres://..." npm run db:railway:mark-applied -w apps/backend
+```
+
+`start:prod` now fails fast on migration problems. If `db:railway:inspect` reports `unknown_drift`, treat it as a manual rescue case instead of trying to baseline it during app boot.
 
 Legacy card export to normalized seed data:
 
@@ -181,6 +209,7 @@ npm run typecheck -w apps/backend
 Current OCR/matching behavior:
 
 - OCR runs multi-pass (multiple preprocessing variants + region crops).
-- When a back image is provided, extracted back text is prioritized for structured hints.
-- Structured hints extracted: `year`, `card number`, `brand`.
+- Front/back OCR hints are merged, with extra region crops for top banner, side text, and card-number strips.
+- Structured hints extracted: `year`, `card number`, `brand`, `season`, `set/category` hints where available.
 - Candidate scoring is weighted using token overlap + fuzzy similarity + structured hint bonuses.
+- Reverse lookup always uses DuckDuckGo and auto-enables Google Vision enrichment when credentials are present.

@@ -35,6 +35,8 @@ model User {
   email         String         @unique
   passwordHash  String
   pfpUrl        String?
+  pfpOriginalImageKey String?
+  pfpThumbnailImageKey String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   sessions      Session[]
@@ -95,6 +97,12 @@ model CardDefinition {
   insertSetName       String?
   cardType            String?
   isVintage           Boolean         @default(false)
+  canonicalImageUrl   String?
+  canonicalOriginalImageKey String?
+  canonicalThumbnailImageKey String?
+  canonicalSourceUserId String?
+  canonicalSelectedAt DateTime?
+  canonicalSelectedByUserId String?
   metadata            Json?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
@@ -145,6 +153,8 @@ model UserWishlist {
   imageUrl          String?
   originalImageKey  String?
   thumbnailImageKey String?
+  frontImageKey     String?
+  backImageKey      String?
   gradeEstimate     String?
   confidence        Float?
   scanJobId         Int?
@@ -170,6 +180,7 @@ model ScanJob {
   backOriginalImageKey String?
   backThumbnailImageKey String?
   ocrText             String?
+  diagnostics         Json?
   error               String?
   userId              String?
   createdAt           DateTime       @default(now())
@@ -185,13 +196,19 @@ model ScanCandidate {
   scanJobId       Int
   name            String
   set             String?
+  setName         String?
+  legacySetText   String?
+  brand           String?
   year            Int?
+  season          String?
+  cardNumber      String?
   player          String?
   variant         String?
   sport           String?
   score           Float
   validationScore Float?
   sourceHints     Json?
+  diagnostics     Json?
   chosen          Boolean  @default(false)
   createdAt       DateTime @default(now())
   scanJob         ScanJob  @relation(fields: [scanJobId], references: [id], onDelete: Cascade)

@@ -1,10 +1,10 @@
-import { normalizeText } from './normalize.util';
+import { normalizeText } from "./normalize.util";
 
 export const DEFAULT_LOCAL_USER = {
-  id: '00000000-0000-4000-8000-000000000001',
-  username: 'local',
-  email: 'local@example.com',
-  passwordHash: '$argon2id$v=19$m=65536,t=3,p=1$local$placeholder',
+  id: "00000000-0000-4000-8000-000000000001",
+  username: "local",
+  email: "local@example.com",
+  passwordHash: "$argon2id$v=19$m=65536,t=3,p=1$local$placeholder",
   pfpUrl: null as string | null,
 };
 
@@ -32,24 +32,26 @@ export type CatalogDraftInput = {
 };
 
 const BRAND_KEYWORDS = [
-  'upper deck',
-  'topps',
-  'panini',
-  'skybox',
-  'donruss',
-  'prizm',
-  'hoops',
-  'fleer',
-  'bowman',
-  'score',
-  'pokemon',
-  'chrome',
-  'optic',
-  'o pee chee',
+  "upper deck",
+  "topps",
+  "panini",
+  "skybox",
+  "donruss",
+  "prizm",
+  "hoops",
+  "fleer",
+  "bowman",
+  "score",
+  "pokemon",
+  "chrome",
+  "optic",
+  "o pee chee",
 ];
 
-export function normalizeNullableText(value: string | null | undefined): string | null {
-  if (typeof value !== 'string') {
+export function normalizeNullableText(
+  value: string | null | undefined,
+): string | null {
+  if (typeof value !== "string") {
     return null;
   }
 
@@ -57,12 +59,14 @@ export function normalizeNullableText(value: string | null | undefined): string 
   return trimmed ? trimmed : null;
 }
 
-export function normalizeNullableNumber(value: number | string | null | undefined): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
+export function normalizeNullableNumber(
+  value: number | string | null | undefined,
+): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
     return value;
   }
 
-  if (typeof value === 'string' && value.trim()) {
+  if (typeof value === "string" && value.trim()) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
   }
@@ -84,8 +88,12 @@ export function inferBrand(value: string | null | undefined): string | null {
   return titleCase(match);
 }
 
-export function inferSeason(setValue: string | null | undefined, year: number | null | undefined): string | null {
-  const fromSet = normalizeNullableText(setValue)?.match(/\b(\d{4}-\d{2})\b/)?.[1];
+export function inferSeason(
+  setValue: string | null | undefined,
+  year: number | null | undefined,
+): string | null {
+  const fromSet =
+    normalizeNullableText(setValue)?.match(/\b(\d{4}-\d{2})\b/)?.[1];
   if (fromSet) {
     return fromSet;
   }
@@ -97,7 +105,9 @@ export function inferSeason(setValue: string | null | undefined, year: number | 
   return null;
 }
 
-export function inferCardNumber(...values: Array<string | null | undefined>): string | null {
+export function inferCardNumber(
+  ...values: Array<string | null | undefined>
+): string | null {
   let standaloneFallback: string | null = null;
 
   for (const value of values) {
@@ -133,11 +143,11 @@ export function buildNormalizedSetKey(input: {
     normalizeText(input.brand),
     normalizeText(input.setName),
     normalizeText(input.legacySetText),
-    input.yearManufactured ? String(input.yearManufactured) : '',
+    input.yearManufactured ? String(input.yearManufactured) : "",
     normalizeText(input.sport),
   ]
     .filter(Boolean)
-    .join('|');
+    .join("|");
 }
 
 export function buildNormalizedCardKey(input: {
@@ -157,26 +167,30 @@ export function buildNormalizedCardKey(input: {
     normalizeText(input.player),
     normalizeText(input.variant),
     normalizeText(input.legacySetText),
-    input.year ? String(input.year) : '',
+    input.year ? String(input.year) : "",
     normalizeText(input.sport),
   ]
     .filter(Boolean)
-    .join('|');
+    .join("|");
 }
 
 export function deriveCatalogDraft(input: CatalogDraftInput) {
   const setValue = normalizeNullableText(input.set ?? input.setName);
   const explicitSetName = normalizeNullableText(input.setName);
   const explicitBrand = normalizeNullableText(input.brand);
-  const yearValue = normalizeNullableNumber(input.yearManufactured ?? input.year);
+  const yearValue = normalizeNullableNumber(
+    input.yearManufactured ?? input.year,
+  );
   const sportValue = normalizeNullableText(input.sport);
   const playerValue = normalizeNullableText(input.player);
   const variantValue = normalizeNullableText(input.variant);
   const brandValue = explicitBrand ?? inferBrand(setValue);
   const setNameValue = explicitSetName ?? setValue;
-  const seasonValue = normalizeNullableText(input.season) ?? inferSeason(setValue, yearValue);
+  const seasonValue =
+    normalizeNullableText(input.season) ?? inferSeason(setValue, yearValue);
   const cardNumberValue =
-    normalizeNullableText(input.cardNumber) ?? inferCardNumber(input.name, setValue, input.variant);
+    normalizeNullableText(input.cardNumber) ??
+    inferCardNumber(input.name, setValue, input.variant);
   const normalizedSetKey = buildNormalizedSetKey({
     brand: brandValue,
     setName: setNameValue,
@@ -221,8 +235,8 @@ export function deriveCatalogDraft(input: CatalogDraftInput) {
 
 function titleCase(value: string): string {
   return value
-    .split(' ')
+    .split(" ")
     .filter(Boolean)
     .map((token) => `${token.charAt(0).toUpperCase()}${token.slice(1)}`)
-    .join(' ');
+    .join(" ");
 }

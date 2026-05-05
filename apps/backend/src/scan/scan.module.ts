@@ -1,13 +1,14 @@
-import { Module } from '@nestjs/common';
-import { AuthModule } from '../auth/auth.module';
-import { CatalogModule } from '../catalog/catalog.module';
-import { OcrService } from '../ocr/ocr.service';
-import { StorageService } from '../storage/storage.service';
-import { ValidationService } from '../validation/validation.service';
-import { LookupService } from '../lookup/lookup.service';
-import { ScanController } from './scan.controller';
-import { LinkPreviewService } from './link-preview.service';
-import { ScanService } from './scan.service';
+import { Module } from "@nestjs/common";
+import { AuthModule } from "../auth/auth.module";
+import { CatalogModule } from "../catalog/catalog.module";
+import { OcrService } from "../ocr/ocr.service";
+import { StorageService } from "../storage/storage.service";
+import { ValidationService } from "../validation/validation.service";
+import { LookupService } from "../lookup/lookup.service";
+import { ScanController } from "./scan.controller";
+import { LinkPreviewService } from "./link-preview.service";
+import { ScanEnrichmentService } from "./scan-enrichment.service";
+import { ScanService } from "./scan.service";
 
 @Module({
   imports: [CatalogModule, AuthModule],
@@ -19,6 +20,7 @@ import { ScanService } from './scan.service';
     ValidationService,
     LookupService,
     LinkPreviewService,
+    ScanEnrichmentService,
   ],
   exports: [ScanService],
 })

@@ -1,5 +1,5 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 import {
   IsBoolean,
   IsEnum,
@@ -8,8 +8,8 @@ import {
   IsString,
   Max,
   Min,
-} from 'class-validator';
-import { CollectionStatus } from '../../prisma/client';
+} from "class-validator";
+import { CollectionStatus } from "../../prisma/client";
 
 export class UpdateCardDto {
   @ApiPropertyOptional()

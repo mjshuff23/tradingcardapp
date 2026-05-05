@@ -6,11 +6,46 @@ import { AppShell } from '../../components/AppShell';
 import { CardImage } from '../../components/CardImage';
 import { PageHeader } from '../../components/PageHeader';
 import { StatusPill } from '../../components/StatusPill';
+import { SuggestionPreview } from '../../components/SuggestionPreview';
+import { ThemedSelect, ThemedSelectOption } from '../../components/ThemedSelect';
 import { useAuth } from '../../lib/auth-context';
 import {
+  actionRowClass,
+  checkboxInputClass,
+  checkboxRowClass,
+  cn,
+  detailGridClass,
+  detailItemClass,
+  detailLabelClass,
+  detailValueClass,
+  fieldClass,
+  fieldGridClass,
+  fieldLabelClass,
+  fileButtonClass,
+  finePrintClass,
+  ghostButtonClass,
+  hiddenFileInputClass,
+  inputClass,
+  messageClass,
+  pageStackClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  sectionHeaderClass,
+  softSurfaceClass,
+  surfaceClass,
+  surfaceCopyClass,
+  surfaceTitleClass,
+  textareaClass,
+} from '../../lib/ui';
+import {
   CardDetail,
+  CardTaxonomy,
   CollectionStatus,
+  clearCardImage,
   getCard,
+  getCardTaxonomy,
+  normalizeCardTitle,
+  uploadCardImage,
   updateCard,
 } from '../../lib/api';
 
@@ -116,6 +151,102 @@ function joinFields(values: Array<string | number | null | undefined>) {
   return values.filter(Boolean).join(' · ');
 }
 
+const NORMALIZATION_FIELD_LABELS: Record<string, string> = {
+  name: 'Card name',
+  player: 'Player',
+  brand: 'Brand',
+  setName: 'Set name',
+  yearManufactured: 'Year',
+  season: 'Season',
+  cardNumber: 'Card number',
+  sport: 'Sport',
+  variant: 'Variant',
+  category: 'Category',
+  subcategory: 'Subcategory',
+  hasAutographVariant: 'Auto variant exists',
+  isVintage: 'Vintage flag',
+};
+
+function applyNormalizationToForm(form: FormState, normalized: Awaited<ReturnType<typeof normalizeCardTitle>>): FormState {
+  return {
+    ...form,
+    name: normalized.fields.name ?? form.name,
+    player: normalized.fields.player ?? form.player,
+    brand: normalized.fields.brand ?? form.brand,
+    setName: normalized.fields.setName ?? form.setName,
+    legacySetText: normalized.fields.setName ?? form.legacySetText,
+    season: normalized.fields.season ?? form.season,
+    cardNumber: normalized.fields.cardNumber ?? form.cardNumber,
+    yearManufactured:
+      normalized.fields.yearManufactured !== undefined &&
+      normalized.fields.yearManufactured !== null
+        ? String(normalized.fields.yearManufactured)
+        : form.yearManufactured,
+    variant: normalized.fields.variant ?? form.variant,
+    sport: normalized.fields.sport ?? form.sport,
+    category: normalized.fields.category ?? form.category,
+    subcategory: normalized.fields.subcategory ?? form.subcategory,
+    hasAutographVariant:
+      normalized.fields.hasAutographVariant ?? form.hasAutographVariant,
+    isVintage: normalized.fields.isVintage ?? form.isVintage,
+  };
+}
+
+function buildSuggestionItems(
+  form: FormState,
+  normalized: Awaited<ReturnType<typeof normalizeCardTitle>> | null,
+) {
+  if (!normalized) {
+    return [];
+  }
+
+  const currentValues: Record<string, string> = {
+    name: form.name || 'Empty',
+    player: form.player || 'Empty',
+    brand: form.brand || 'Empty',
+    setName: form.setName || 'Empty',
+    yearManufactured: form.yearManufactured || 'Empty',
+    season: form.season || 'Empty',
+    cardNumber: form.cardNumber || 'Empty',
+    sport: form.sport || 'Empty',
+    variant: form.variant || 'Empty',
+    category: form.category || 'Empty',
+    subcategory: form.subcategory || 'Empty',
+    hasAutographVariant: form.hasAutographVariant ? 'Yes' : 'No',
+    isVintage: form.isVintage ? 'Yes' : 'No',
+  };
+
+  return normalized.changedFields.map((field) => {
+    const suggestedValue = normalized.fields[field as keyof typeof normalized.fields];
+    return {
+      field: NORMALIZATION_FIELD_LABELS[field] ?? field,
+      previous: currentValues[field] ?? 'Empty',
+      next:
+        typeof suggestedValue === 'boolean'
+          ? suggestedValue
+            ? 'Yes'
+            : 'No'
+          : suggestedValue === null || suggestedValue === undefined || suggestedValue === ''
+            ? 'Empty'
+            : String(suggestedValue),
+    };
+  });
+}
+
+function toSelectOptions(values: string[], currentValue?: string | null): ThemedSelectOption[] {
+  const unique = Array.from(new Set([...values, currentValue ?? ''].filter(Boolean)));
+  return unique.map((value) => ({ value, label: value }));
+}
+
+function subcategoryOptions(taxonomy: CardTaxonomy | null, category: string | null | undefined) {
+  if (!taxonomy || !category) {
+    return [];
+  }
+
+  const group = taxonomy.groups.find((entry) => entry.category === category);
+  return group ? group.subcategories.map((subcategory) => subcategory.name) : [];
+}
+
 export default function CardDetailPage() {
   const router = useRouter();
   const { authenticated, loading: authLoading } = useAuth();
@@ -129,7 +260,13 @@ export default function CardDetailPage() {
 
   const [card, setCard] = useState<CardDetail | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
+  const [taxonomy, setTaxonomy] = useState<CardTaxonomy | null>(null);
+  const [pendingSuggestion, setPendingSuggestion] = useState<Awaited<
+    ReturnType<typeof normalizeCardTitle>
+  > | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cleanupBusy, setCleanupBusy] = useState(false);
+  const [imageBusyKind, setImageBusyKind] = useState<'front' | 'back' | 'canonical' | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,12 +283,16 @@ export default function CardDetailPage() {
       setError(null);
 
       try {
-        const payload = await getCard(cardId);
+        const [payload, taxonomyPayload] = await Promise.all([
+          getCard(cardId),
+          getCardTaxonomy(),
+        ]);
         if (stopped) {
           return;
         }
         setCard(payload);
         setForm(toFormState(payload));
+        setTaxonomy(taxonomyPayload);
       } catch (loadError) {
         if (!stopped) {
           setError((loadError as Error).message);
@@ -202,19 +343,32 @@ export default function CardDetailPage() {
         hasAutographVariant: form.hasAutographVariant,
         isVintage: form.isVintage,
         collectionStatus: form.collectionStatus,
-        condition: form.condition.trim() || null,
-        isAutographed: form.isAutographed,
-        autographFormat: form.autographFormat.trim() || null,
-        isForTrade: form.isForTrade,
-        isForSale: form.isForSale,
-        askingPriceCents: parseOptionalNumber(form.askingPriceCents),
-        priority: parseOptionalNumber(form.priority),
+        condition:
+          form.collectionStatus === 'WANTED' ? null : form.condition.trim() || null,
+        isAutographed:
+          form.collectionStatus === 'WANTED' ? false : form.isAutographed,
+        autographFormat:
+          form.collectionStatus === 'WANTED' ? null : form.autographFormat.trim() || null,
+        isForTrade:
+          form.collectionStatus === 'WANTED' ? false : form.isForTrade,
+        isForSale:
+          form.collectionStatus === 'WANTED' ? false : form.isForSale,
+        askingPriceCents:
+          form.collectionStatus === 'WANTED'
+            ? null
+            : parseOptionalNumber(form.askingPriceCents),
+        priority:
+          form.collectionStatus === 'WANTED'
+            ? parseOptionalNumber(form.priority)
+            : null,
         notes: form.notes.trim() || null,
-        gradeEstimate: form.gradeEstimate.trim() || null,
+        gradeEstimate:
+          form.collectionStatus === 'WANTED' ? null : form.gradeEstimate.trim() || null,
       });
 
       setCard(updated);
       setForm(toFormState(updated));
+      setPendingSuggestion(null);
       setMessage('Card updated.');
     } catch (saveError) {
       setError((saveError as Error).message);
@@ -222,6 +376,117 @@ export default function CardDetailPage() {
       setBusy(false);
     }
   };
+
+  const handleCleanup = async () => {
+    if (!form) {
+      return;
+    }
+
+    setCleanupBusy(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const normalized = await normalizeCardTitle({
+        rawTitle: [
+          form.yearManufactured,
+          form.player,
+          form.name,
+          form.brand,
+          form.setName || form.legacySetText,
+          form.cardNumber ? `#${form.cardNumber}` : '',
+          form.variant,
+        ]
+          .filter(Boolean)
+          .join(' '),
+        fields: {
+          name: form.name || null,
+          player: form.player || null,
+          brand: form.brand || null,
+          setName: form.setName || form.legacySetText || null,
+          yearManufactured: parseOptionalNumber(form.yearManufactured),
+          season: form.season || null,
+          cardNumber: form.cardNumber || null,
+          sport: form.sport || null,
+          variant: form.variant || null,
+          category: form.category || null,
+          subcategory: form.subcategory || null,
+          hasAutographVariant: form.hasAutographVariant,
+          isVintage: form.isVintage,
+        },
+      });
+
+      setPendingSuggestion(normalized);
+      setMessage(
+        normalized.usedAi
+          ? `AI cleanup ready at ${normalized.confidence.toFixed(3)} confidence.`
+          : normalized.changedFields.length
+            ? `Cleanup suggestions ready at ${normalized.confidence.toFixed(3)} confidence.`
+            : 'No better suggestion found from the current title.',
+      );
+    } catch (cleanupError) {
+      setError((cleanupError as Error).message);
+    } finally {
+      setCleanupBusy(false);
+    }
+  };
+
+  const handleUploadImage = async (kind: 'front' | 'back' | 'canonical', file: File | null) => {
+    if (!cardId || !file || !authenticated) {
+      return;
+    }
+
+    setImageBusyKind(kind);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const updated = await uploadCardImage(cardId, kind, file);
+      setCard(updated);
+      setForm(toFormState(updated));
+      setMessage(`${kind === 'canonical' ? 'Canonical' : `${kind} image`} updated.`);
+    } catch (imageError) {
+      setError((imageError as Error).message);
+    } finally {
+      setImageBusyKind(null);
+    }
+  };
+
+  const handleClearImage = async (kind: 'front' | 'back' | 'canonical') => {
+    if (!cardId || !authenticated) {
+      return;
+    }
+
+    setImageBusyKind(kind);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const updated = await clearCardImage(cardId, kind);
+      setCard(updated);
+      setForm(toFormState(updated));
+      setMessage(`${kind === 'canonical' ? 'Canonical' : `${kind} image`} cleared.`);
+    } catch (imageError) {
+      setError((imageError as Error).message);
+    } finally {
+      setImageBusyKind(null);
+    }
+  };
+
+  const applyPendingSuggestion = () => {
+    if (!form || !pendingSuggestion) {
+      return;
+    }
+
+    setForm(applyNormalizationToForm(form, pendingSuggestion));
+    setPendingSuggestion(null);
+    setMessage('Suggested cleanup applied to the form.');
+  };
+
+  const isWanted = form?.collectionStatus === 'WANTED';
+  const categoryOptions = taxonomy?.groups.map((group) => group.category) ?? [];
+  const activeSubcategoryOptions = subcategoryOptions(taxonomy, form?.category);
+  const suggestionItems = form ? buildSuggestionItems(form, pendingSuggestion) : [];
 
   return (
     <AppShell>
@@ -233,18 +498,18 @@ export default function CardDetailPage() {
         </title>
       </Head>
 
-      <div className="stack fade-up">
+      <div className={pageStackClass}>
         <PageHeader
           eyebrow="Card Detail"
           title={card?.title ?? 'Reviewing card detail'}
           description="Identity, set metadata, market state, and provenance all stay visible here so edits match the real catalog model."
           actions={
-            <div className="action-row">
-              <Link className="button-ghost" href="/binder">
+            <div className={actionRowClass}>
+              <Link className={ghostButtonClass} href="/binder">
                 Back to binder
               </Link>
               {!authLoading && !authenticated ? (
-                <Link className="button" href="/login">
+                <Link className={primaryButtonClass} href="/login">
                   Log in to edit
                 </Link>
               ) : null}
@@ -252,17 +517,17 @@ export default function CardDetailPage() {
           }
         />
 
-        {loading ? <p className="message">Loading card...</p> : null}
-        {error ? <p className="message message--error">{error}</p> : null}
-        {message ? <p className="message message--success">{message}</p> : null}
+        {loading ? <p className={messageClass()}>Loading card...</p> : null}
+        {error ? <p className={messageClass('error')}>{error}</p> : null}
+        {message ? <p className={messageClass('success')}>{message}</p> : null}
 
         {card && form ? (
-          <div className="detail-shell">
-            <aside className="detail-sidebar">
-              <section className="surface detail-hero">
+          <div className="grid gap-6 xl:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.1fr)]">
+            <aside className="flex flex-col gap-6">
+              <section className={cn(surfaceClass, 'flex flex-col gap-6 p-6 sm:p-8')}>
                 <CardImage alt={card.title} src={card.imageUrl} />
 
-                <div className="pill-row">
+                <div className="flex flex-wrap gap-3">
                   <StatusPill
                     label={card.collectionStatus}
                     tone={card.collectionStatus === 'OWNED' ? 'success' : 'accent'}
@@ -274,12 +539,13 @@ export default function CardDetailPage() {
                         : 'No confidence'
                     }
                   />
+                  <StatusPill label={`Image ${card.imageSource.toLowerCase()}`} />
                 </div>
 
-                <div className="detail-grid detail-grid-spaced">
-                  <div className="detail-item">
-                    <strong>Set line</strong>
-                    <span>
+                <div className={cn(detailGridClass, 'mt-1')}>
+                  <div className={detailItemClass}>
+                    <strong className={detailLabelClass}>Set line</strong>
+                    <span className={detailValueClass}>
                       {joinFields([
                         card.definition.cardSet?.brand,
                         card.definition.cardSet?.setName ?? card.definition.legacySetText,
@@ -287,9 +553,9 @@ export default function CardDetailPage() {
                       ]) || 'No set line yet'}
                     </span>
                   </div>
-                  <div className="detail-item">
-                    <strong>Catalog type</strong>
-                    <span>
+                  <div className={detailItemClass}>
+                    <strong className={detailLabelClass}>Catalog type</strong>
+                    <span className={detailValueClass}>
                       {joinFields([
                         card.definition.category,
                         card.definition.subcategory,
@@ -297,9 +563,9 @@ export default function CardDetailPage() {
                       ]) || 'Uncategorized'}
                     </span>
                   </div>
-                  <div className="detail-item">
-                    <strong>Market state</strong>
-                    <span>
+                  <div className={detailItemClass}>
+                    <strong className={detailLabelClass}>Market state</strong>
+                    <span className={detailValueClass}>
                       {joinFields([
                         card.record.isForSale
                           ? formatCurrency(card.record.askingPriceCents)
@@ -311,46 +577,64 @@ export default function CardDetailPage() {
                       ]) || 'Not listed'}
                     </span>
                   </div>
-                  <div className="detail-item">
-                    <strong>Provenance</strong>
-                    <span>
+                  <div className={detailItemClass}>
+                    <strong className={detailLabelClass}>Provenance</strong>
+                    <span className={detailValueClass}>
                       {card.record.scanJobId
                         ? `From scan ${card.record.scanJobId}`
                         : 'Imported or edited manually'}
                     </span>
                   </div>
+                  <div className={detailItemClass}>
+                    <strong className={detailLabelClass}>Image fallback</strong>
+                    <span className={detailValueClass}>
+                      {card.personalImageUrl
+                        ? 'Personal image available'
+                        : card.canonicalImageUrl
+                          ? 'Using canonical fallback'
+                          : card.imageUrl
+                            ? 'Using legacy remote image'
+                            : 'No image source yet'}
+                    </span>
+                  </div>
                 </div>
               </section>
 
-              <section className="surface">
-                <div className="section-header">
+              <section className={cn(surfaceClass, 'p-6 sm:p-8')}>
+                <div className={sectionHeaderClass}>
                   <div>
-                    <h2>Readout</h2>
-                    <p className="fine-print">Current persisted values from the catalog contract.</p>
+                    <h2 className={surfaceTitleClass}>Readout</h2>
+                    <p className={cn(finePrintClass, 'mt-2')}>
+                      Current persisted values from the catalog contract.
+                    </p>
                   </div>
                 </div>
 
-                <div className="detail-grid">
-                  <div className="detail-item">
-                    <strong>Season + sport</strong>
-                    <span>
+                <div className={cn(detailGridClass, 'mt-6')}>
+                  <div className={detailItemClass}>
+                    <strong className={detailLabelClass}>Season + sport</strong>
+                    <span className={detailValueClass}>
                       {joinFields([
                         card.definition.cardSet?.season,
                         card.definition.cardSet?.sport,
                       ]) || 'Unknown'}
                     </span>
                   </div>
-                  <div className="detail-item">
-                    <strong>Original or reprint</strong>
-                    <span>{card.definition.originalOrReprint ?? 'Unknown'}</span>
+                  <div className={detailItemClass}>
+                    <strong className={detailLabelClass}>Original or reprint</strong>
+                    <span className={detailValueClass}>
+                      {card.definition.originalOrReprint ?? 'Unknown'}
+                    </span>
                   </div>
-                  <div className="detail-item">
-                    <strong>Parallel / variety</strong>
-                    <span>{card.definition.parallelOrVariety ?? 'None logged'}</span>
+                  <div className={detailItemClass}>
+                    <strong className={detailLabelClass}>Parallel / variety</strong>
+                    <span className={detailValueClass}>
+                      {card.definition.parallelOrVariety ?? 'None logged'}
+                    </span>
                   </div>
-                  <div className="detail-item">
-                    <strong>Autograph state</strong>
-                    <span>
+                  <div className={detailItemClass}>
+                    <strong className={detailLabelClass}>Autograph state</strong>
+                    <span className={detailValueClass}>
                       {joinFields([
                         card.record.isAutographed ? 'Signed' : null,
                         card.record.autographFormat,
@@ -358,51 +642,190 @@ export default function CardDetailPage() {
                       ]) || 'Not marked'}
                     </span>
                   </div>
-                  <div className="detail-item">
-                    <strong>Condition + grade</strong>
-                    <span>
+                  <div className={detailItemClass}>
+                    <strong className={detailLabelClass}>Condition + grade</strong>
+                    <span className={detailValueClass}>
                       {joinFields([card.record.condition, card.record.gradeEstimate]) || 'Unscored'}
                     </span>
                   </div>
-                  <div className="detail-item">
-                    <strong>Last updated</strong>
-                    <span>{formatDate(card.record.updatedAt)}</span>
+                  <div className={detailItemClass}>
+                    <strong className={detailLabelClass}>Last updated</strong>
+                    <span className={detailValueClass}>{formatDate(card.record.updatedAt)}</span>
+                  </div>
+                  <div className={detailItemClass}>
+                    <strong className={detailLabelClass}>Canonical image</strong>
+                    <span className={detailValueClass}>
+                      {card.canonicalImageUrl ? 'Available as shared fallback' : 'Not set yet'}
+                    </span>
                   </div>
                 </div>
               </section>
             </aside>
 
-            <section className="stack">
+            <section className="flex flex-col gap-6">
+              {pendingSuggestion ? (
+                <SuggestionPreview
+                  title="Cleanup preview"
+                  subtitle={
+                    pendingSuggestion.usedAi
+                      ? `AI refinement suggested ${pendingSuggestion.changedFields.length} field change(s).`
+                      : `Parser pass suggested ${pendingSuggestion.changedFields.length} field change(s).`
+                  }
+                  items={suggestionItems}
+                  emptyMessage="No better suggestion found from the current title."
+                  applyLabel="Apply suggestions"
+                  onApply={applyPendingSuggestion}
+                  onDismiss={() => setPendingSuggestion(null)}
+                />
+              ) : null}
+
               {!authenticated ? (
-                <section className="surface gate-card">
-                  <h2 className="surface-title">Viewing the demo card in read-only mode</h2>
-                  <p className="surface-copy">
+                <section
+                  className={cn(
+                    surfaceClass,
+                    'bg-[linear-gradient(145deg,rgba(66,110,105,0.12),transparent_65%),var(--surface)] p-6 sm:p-8',
+                  )}
+                >
+                  <h2 className={surfaceTitleClass}>Viewing the demo card in read-only mode</h2>
+                  <p className={cn(surfaceCopyClass, 'mt-3')}>
                     Guests can inspect the richer card detail surface, but edits, trade flags, wishlist priority, and future profile activity belong to signed-in collectors.
                   </p>
-                  <div className="action-row">
-                    <Link className="button" href="/login">
+                  <div className={cn(actionRowClass, 'mt-5')}>
+                    <Link className={primaryButtonClass} href="/login">
                       Log in
                     </Link>
-                    <Link className="button-secondary" href="/signup">
+                    <Link className={secondaryButtonClass} href="/signup">
                       Create account
                     </Link>
                   </div>
                 </section>
               ) : null}
 
-              <form className="stack" onSubmit={handleSubmit}>
-                <section className="surface">
-                  <div className="section-header">
+              <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
+                <section className={cn(surfaceClass, 'p-6 sm:p-8')}>
+                  <div className={sectionHeaderClass}>
                     <div>
-                      <h2>Identity</h2>
-                      <p className="fine-print">The public-facing card identity and search hooks.</p>
+                      <h2 className={surfaceTitleClass}>Images</h2>
+                      <p className={cn(finePrintClass, 'mt-2')}>
+                        Personal front/back images live on your card record. Canonical images become
+                        the shared fallback for this card definition.
+                      </p>
                     </div>
                   </div>
 
-                  <div className="field-grid field-grid--three">
-                    <div className="field">
-                      <label htmlFor="name">Card name</label>
+                  <div className="mt-6 grid gap-4 lg:grid-cols-3">
+                    <div className={cn(softSurfaceClass, 'p-4')}>
+                      <h3 className={fieldLabelClass}>Front / primary</h3>
+                      <CardImage alt={`${card.title} front`} src={card.frontImageUrl ?? card.imageUrl} />
+                      {authenticated ? (
+                        <div className={cn(actionRowClass, 'mt-4')}>
+                          <label className={cn(secondaryButtonClass, fileButtonClass)}>
+                            <input
+                              className={hiddenFileInputClass}
+                              type="file"
+                              accept="image/*"
+                              onChange={(event) => void handleUploadImage('front', event.target.files?.[0] ?? null)}
+                              disabled={imageBusyKind !== null}
+                            />
+                            {imageBusyKind === 'front' ? 'Uploading...' : 'Upload front'}
+                          </label>
+                          <button
+                            className={ghostButtonClass}
+                            type="button"
+                            onClick={() => void handleClearImage('front')}
+                            disabled={imageBusyKind !== null || !card.personalImageUrl}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className={cn(softSurfaceClass, 'p-4')}>
+                      <h3 className={fieldLabelClass}>Back</h3>
+                      <CardImage alt={`${card.title} back`} src={card.backImageUrl} />
+                      {authenticated ? (
+                        <div className={cn(actionRowClass, 'mt-4')}>
+                          <label className={cn(secondaryButtonClass, fileButtonClass)}>
+                            <input
+                              className={hiddenFileInputClass}
+                              type="file"
+                              accept="image/*"
+                              onChange={(event) => void handleUploadImage('back', event.target.files?.[0] ?? null)}
+                              disabled={imageBusyKind !== null}
+                            />
+                            {imageBusyKind === 'back' ? 'Uploading...' : 'Upload back'}
+                          </label>
+                          <button
+                            className={ghostButtonClass}
+                            type="button"
+                            onClick={() => void handleClearImage('back')}
+                            disabled={imageBusyKind !== null || !card.backImageUrl}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className={cn(softSurfaceClass, 'p-4')}>
+                      <h3 className={fieldLabelClass}>Canonical fallback</h3>
+                      <CardImage alt={`${card.title} canonical`} src={card.canonicalImageUrl} />
+                      {authenticated ? (
+                        <div className={cn(actionRowClass, 'mt-4')}>
+                          <label className={cn(secondaryButtonClass, fileButtonClass)}>
+                            <input
+                              className={hiddenFileInputClass}
+                              type="file"
+                              accept="image/*"
+                              onChange={(event) =>
+                                void handleUploadImage('canonical', event.target.files?.[0] ?? null)
+                              }
+                              disabled={imageBusyKind !== null}
+                            />
+                            {imageBusyKind === 'canonical' ? 'Uploading...' : 'Upload canonical'}
+                          </label>
+                          <button
+                            className={ghostButtonClass}
+                            type="button"
+                            onClick={() => void handleClearImage('canonical')}
+                            disabled={imageBusyKind !== null || !card.canonicalImageUrl}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </section>
+
+                <section className={cn(surfaceClass, 'p-6 sm:p-8')}>
+                  <div className={sectionHeaderClass}>
+                    <div>
+                      <h2 className={surfaceTitleClass}>Identity</h2>
+                      <p className={cn(finePrintClass, 'mt-2')}>
+                        The public-facing card identity and search hooks.
+                      </p>
+                    </div>
+                    {authenticated ? (
+                      <button
+                        className={secondaryButtonClass}
+                        type="button"
+                        onClick={() => void handleCleanup()}
+                        disabled={cleanupBusy}
+                      >
+                        {cleanupBusy ? 'Cleaning...' : 'Suggest cleanup'}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div className={cn(fieldGridClass, 'mt-6')}>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="name">
+                        Card name
+                      </label>
                       <input
+                        className={inputClass}
                         id="name"
                         value={form.name}
                         onChange={(event) => setForm({ ...form, name: event.target.value })}
@@ -411,9 +834,12 @@ export default function CardDetailPage() {
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="player">Player</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="player">
+                        Player
+                      </label>
                       <input
+                        className={inputClass}
                         id="player"
                         value={form.player}
                         onChange={(event) => setForm({ ...form, player: event.target.value })}
@@ -421,9 +847,12 @@ export default function CardDetailPage() {
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="variant">Variant</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="variant">
+                        Variant
+                      </label>
                       <input
+                        className={inputClass}
                         id="variant"
                         value={form.variant}
                         onChange={(event) => setForm({ ...form, variant: event.target.value })}
@@ -431,29 +860,45 @@ export default function CardDetailPage() {
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="category">Category</label>
-                      <input
-                        id="category"
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="category">
+                        Category
+                      </label>
+                      <ThemedSelect
                         value={form.category}
-                        onChange={(event) => setForm({ ...form, category: event.target.value })}
+                        onChange={(nextValue) =>
+                          setForm({
+                            ...form,
+                            category: nextValue,
+                            subcategory:
+                              nextValue === form.category ? form.subcategory : '',
+                          })
+                        }
                         disabled={!authenticated}
+                        placeholder="Select category"
+                        options={toSelectOptions(categoryOptions, form.category)}
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="subcategory">Subcategory</label>
-                      <input
-                        id="subcategory"
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="subcategory">
+                        Subcategory
+                      </label>
+                      <ThemedSelect
                         value={form.subcategory}
-                        onChange={(event) => setForm({ ...form, subcategory: event.target.value })}
-                        disabled={!authenticated}
+                        onChange={(nextValue) => setForm({ ...form, subcategory: nextValue })}
+                        disabled={!authenticated || !form.category}
+                        placeholder={form.category ? 'Select subcategory' : 'Pick category first'}
+                        options={toSelectOptions(activeSubcategoryOptions, form.subcategory)}
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="cardType">Card type</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="cardType">
+                        Card type
+                      </label>
                       <input
+                        className={inputClass}
                         id="cardType"
                         value={form.cardType}
                         onChange={(event) => setForm({ ...form, cardType: event.target.value })}
@@ -463,18 +908,23 @@ export default function CardDetailPage() {
                   </div>
                 </section>
 
-                <section className="surface">
-                  <div className="section-header">
+                <section className={cn(surfaceClass, 'p-6 sm:p-8')}>
+                  <div className={sectionHeaderClass}>
                     <div>
-                      <h2>Set metadata</h2>
-                      <p className="fine-print">Brand, season, numbering, and release context.</p>
+                      <h2 className={surfaceTitleClass}>Set metadata</h2>
+                      <p className={cn(finePrintClass, 'mt-2')}>
+                        Brand, season, numbering, and release context.
+                      </p>
                     </div>
                   </div>
 
-                  <div className="field-grid field-grid--three">
-                    <div className="field">
-                      <label htmlFor="brand">Brand</label>
+                  <div className={cn(fieldGridClass, 'mt-6')}>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="brand">
+                        Brand
+                      </label>
                       <input
+                        className={inputClass}
                         id="brand"
                         value={form.brand}
                         onChange={(event) => setForm({ ...form, brand: event.target.value })}
@@ -482,9 +932,12 @@ export default function CardDetailPage() {
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="setName">Set name</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="setName">
+                        Set name
+                      </label>
                       <input
+                        className={inputClass}
                         id="setName"
                         value={form.setName}
                         onChange={(event) => setForm({ ...form, setName: event.target.value })}
@@ -492,9 +945,12 @@ export default function CardDetailPage() {
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="legacySetText">Legacy set text</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="legacySetText">
+                        Legacy set text
+                      </label>
                       <input
+                        className={inputClass}
                         id="legacySetText"
                         value={form.legacySetText}
                         onChange={(event) => setForm({ ...form, legacySetText: event.target.value })}
@@ -502,9 +958,12 @@ export default function CardDetailPage() {
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="season">Season</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="season">
+                        Season
+                      </label>
                       <input
+                        className={inputClass}
                         id="season"
                         value={form.season}
                         onChange={(event) => setForm({ ...form, season: event.target.value })}
@@ -512,9 +971,12 @@ export default function CardDetailPage() {
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="sport">Sport</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="sport">
+                        Sport
+                      </label>
                       <input
+                        className={inputClass}
                         id="sport"
                         value={form.sport}
                         onChange={(event) => setForm({ ...form, sport: event.target.value })}
@@ -522,9 +984,12 @@ export default function CardDetailPage() {
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="cardNumber">Card number</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="cardNumber">
+                        Card number
+                      </label>
                       <input
+                        className={inputClass}
                         id="cardNumber"
                         value={form.cardNumber}
                         onChange={(event) => setForm({ ...form, cardNumber: event.target.value })}
@@ -532,9 +997,12 @@ export default function CardDetailPage() {
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="yearManufactured">Year manufactured</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="yearManufactured">
+                        Year manufactured
+                      </label>
                       <input
+                        className={inputClass}
                         id="yearManufactured"
                         inputMode="numeric"
                         value={form.yearManufactured}
@@ -545,9 +1013,12 @@ export default function CardDetailPage() {
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="setType">Set type</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="setType">
+                        Set type
+                      </label>
                       <input
+                        className={inputClass}
                         id="setType"
                         value={form.setType}
                         onChange={(event) => setForm({ ...form, setType: event.target.value })}
@@ -555,9 +1026,12 @@ export default function CardDetailPage() {
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="insertSetName">Insert set name</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="insertSetName">
+                        Insert set name
+                      </label>
                       <input
+                        className={inputClass}
                         id="insertSetName"
                         value={form.insertSetName}
                         onChange={(event) =>
@@ -567,9 +1041,12 @@ export default function CardDetailPage() {
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="parallelOrVariety">Parallel / variety</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="parallelOrVariety">
+                        Parallel / variety
+                      </label>
                       <input
+                        className={inputClass}
                         id="parallelOrVariety"
                         value={form.parallelOrVariety}
                         onChange={(event) =>
@@ -579,9 +1056,12 @@ export default function CardDetailPage() {
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="originalOrReprint">Original or reprint</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="originalOrReprint">
+                        Original or reprint
+                      </label>
                       <input
+                        className={inputClass}
                         id="originalOrReprint"
                         value={form.originalOrReprint}
                         onChange={(event) =>
@@ -593,71 +1073,93 @@ export default function CardDetailPage() {
                   </div>
                 </section>
 
-                <section className="surface">
-                  <div className="section-header">
+                <section className={cn(surfaceClass, 'p-6 sm:p-8')}>
+                  <div className={sectionHeaderClass}>
                     <div>
-                      <h2>Ownership + market state</h2>
-                      <p className="fine-print">Collection status, condition, grading, and disposition.</p>
+                      <h2 className={surfaceTitleClass}>Ownership + market state</h2>
+                      <p className={cn(finePrintClass, 'mt-2')}>
+                        Collection status, condition, grading, and disposition.
+                      </p>
                     </div>
                   </div>
 
-                  <div className="field-grid field-grid--three">
-                    <div className="field">
-                      <label htmlFor="status">Status</label>
-                      <select
-                        id="status"
+                  {isWanted ? (
+                    <p className={cn(messageClass(), 'mt-6')}>
+                      Wanted cards keep wishlist priority and notes active. Copy-specific fields like condition, grade, autograph state, and sale/trade controls are disabled.
+                    </p>
+                  ) : null}
+
+                  <div className={cn(fieldGridClass, 'mt-6')}>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="status">
+                        Status
+                      </label>
+                      <ThemedSelect
                         value={form.collectionStatus}
-                        onChange={(event) =>
+                        onChange={(nextValue) =>
                           setForm({
                             ...form,
-                            collectionStatus: event.target.value as CollectionStatus,
+                            collectionStatus: nextValue as CollectionStatus,
                           })
                         }
                         disabled={!authenticated}
-                      >
-                        <option value="OWNED">Owned</option>
-                        <option value="WANTED">Wanted</option>
-                      </select>
-                    </div>
-
-                    <div className="field">
-                      <label htmlFor="condition">Condition</label>
-                      <input
-                        id="condition"
-                        value={form.condition}
-                        onChange={(event) => setForm({ ...form, condition: event.target.value })}
-                        disabled={!authenticated}
+                        options={[
+                          { value: 'OWNED', label: 'Owned' },
+                          { value: 'WANTED', label: 'Wanted' },
+                        ]}
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="gradeEstimate">Grade estimate</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="condition">
+                        Condition
+                      </label>
                       <input
+                        className={inputClass}
+                        id="condition"
+                        value={form.condition}
+                        onChange={(event) => setForm({ ...form, condition: event.target.value })}
+                        disabled={!authenticated || isWanted}
+                      />
+                    </div>
+
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="gradeEstimate">
+                        Grade estimate
+                      </label>
+                      <input
+                        className={inputClass}
                         id="gradeEstimate"
                         value={form.gradeEstimate}
                         onChange={(event) =>
                           setForm({ ...form, gradeEstimate: event.target.value })
                         }
-                        disabled={!authenticated}
+                        disabled={!authenticated || isWanted}
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="askingPriceCents">Asking price (cents)</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="askingPriceCents">
+                        Asking price (cents)
+                      </label>
                       <input
+                        className={inputClass}
                         id="askingPriceCents"
                         inputMode="numeric"
                         value={form.askingPriceCents}
                         onChange={(event) =>
                           setForm({ ...form, askingPriceCents: event.target.value })
                         }
-                        disabled={!authenticated}
+                        disabled={!authenticated || isWanted}
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="priority">Wishlist priority</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="priority">
+                        Wishlist priority
+                      </label>
                       <input
+                        className={inputClass}
                         id="priority"
                         inputMode="numeric"
                         value={form.priority}
@@ -666,34 +1168,39 @@ export default function CardDetailPage() {
                       />
                     </div>
 
-                    <div className="field">
-                      <label htmlFor="autographFormat">Autograph format</label>
+                    <div className={fieldClass}>
+                      <label className={fieldLabelClass} htmlFor="autographFormat">
+                        Autograph format
+                      </label>
                       <input
+                        className={inputClass}
                         id="autographFormat"
                         value={form.autographFormat}
                         onChange={(event) =>
                           setForm({ ...form, autographFormat: event.target.value })
                         }
-                        disabled={!authenticated}
+                        disabled={!authenticated || isWanted}
                       />
                     </div>
                   </div>
 
-                  <div className="toggle-grid">
-                    <label className="toggle-card">
+                  <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                    <label className={cn(checkboxRowClass, 'cursor-pointer')}>
                       <input
+                        className={checkboxInputClass}
                         type="checkbox"
                         checked={form.isAutographed}
                         onChange={(event) =>
                           setForm({ ...form, isAutographed: event.target.checked })
                         }
-                        disabled={!authenticated}
+                        disabled={!authenticated || isWanted}
                       />
-                      <span>Autographed copy</span>
+                      <span className="text-sm font-medium text-[var(--text)]">Autographed copy</span>
                     </label>
 
-                    <label className="toggle-card">
+                    <label className={cn(checkboxRowClass, 'cursor-pointer')}>
                       <input
+                        className={checkboxInputClass}
                         type="checkbox"
                         checked={form.hasAutographVariant}
                         onChange={(event) =>
@@ -701,11 +1208,14 @@ export default function CardDetailPage() {
                         }
                         disabled={!authenticated}
                       />
-                      <span>Auto variant exists</span>
+                      <span className="text-sm font-medium text-[var(--text)]">
+                        Auto variant exists
+                      </span>
                     </label>
 
-                    <label className="toggle-card">
+                    <label className={cn(checkboxRowClass, 'cursor-pointer')}>
                       <input
+                        className={checkboxInputClass}
                         type="checkbox"
                         checked={form.isVintage}
                         onChange={(event) =>
@@ -713,65 +1223,78 @@ export default function CardDetailPage() {
                         }
                         disabled={!authenticated}
                       />
-                      <span>Vintage flag</span>
+                      <span className="text-sm font-medium text-[var(--text)]">Vintage flag</span>
                     </label>
 
-                    <label className="toggle-card">
+                    <label className={cn(checkboxRowClass, 'cursor-pointer')}>
                       <input
+                        className={checkboxInputClass}
                         type="checkbox"
                         checked={form.isForTrade}
                         onChange={(event) =>
                           setForm({ ...form, isForTrade: event.target.checked })
                         }
-                        disabled={!authenticated}
+                        disabled={!authenticated || isWanted}
                       />
-                      <span>Available for trade</span>
+                      <span className="text-sm font-medium text-[var(--text)]">
+                        Available for trade
+                      </span>
                     </label>
 
-                    <label className="toggle-card">
+                    <label className={cn(checkboxRowClass, 'cursor-pointer')}>
                       <input
+                        className={checkboxInputClass}
                         type="checkbox"
                         checked={form.isForSale}
                         onChange={(event) =>
                           setForm({ ...form, isForSale: event.target.checked })
                         }
-                        disabled={!authenticated}
+                        disabled={!authenticated || isWanted}
                       />
-                      <span>Available for sale</span>
+                      <span className="text-sm font-medium text-[var(--text)]">
+                        Available for sale
+                      </span>
                     </label>
                   </div>
                 </section>
 
-                <section className="surface">
-                  <div className="section-header">
+                <section className={cn(surfaceClass, 'p-6 sm:p-8')}>
+                  <div className={sectionHeaderClass}>
                     <div>
-                      <h2>Notes + provenance</h2>
-                      <p className="fine-print">Collector notes and how this record entered the system.</p>
+                      <h2 className={surfaceTitleClass}>Notes + provenance</h2>
+                      <p className={cn(finePrintClass, 'mt-2')}>
+                        Collector notes and how this record entered the system.
+                      </p>
                     </div>
                   </div>
 
-                  <div className="detail-grid">
-                    <div className="detail-item">
-                      <strong>Created</strong>
-                      <span>{formatDate(card.record.createdAt)}</span>
+                  <div className={cn(detailGridClass, 'mt-6')}>
+                    <div className={detailItemClass}>
+                      <strong className={detailLabelClass}>Created</strong>
+                      <span className={detailValueClass}>{formatDate(card.record.createdAt)}</span>
                     </div>
-                    <div className="detail-item">
-                      <strong>Updated</strong>
-                      <span>{formatDate(card.record.updatedAt)}</span>
+                    <div className={detailItemClass}>
+                      <strong className={detailLabelClass}>Updated</strong>
+                      <span className={detailValueClass}>{formatDate(card.record.updatedAt)}</span>
                     </div>
-                    <div className="detail-item">
-                      <strong>Scan job</strong>
-                      <span>{card.record.scanJobId ?? 'None linked'}</span>
+                    <div className={detailItemClass}>
+                      <strong className={detailLabelClass}>Scan job</strong>
+                      <span className={detailValueClass}>{card.record.scanJobId ?? 'None linked'}</span>
                     </div>
-                    <div className="detail-item">
-                      <strong>Current asking price</strong>
-                      <span>{formatCurrency(card.record.askingPriceCents)}</span>
+                    <div className={detailItemClass}>
+                      <strong className={detailLabelClass}>Current asking price</strong>
+                      <span className={detailValueClass}>
+                        {formatCurrency(card.record.askingPriceCents)}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="field field--textarea">
-                    <label htmlFor="notes">Collector notes</label>
+                  <div className={cn(fieldClass, 'mt-6')}>
+                    <label className={fieldLabelClass} htmlFor="notes">
+                      Collector notes
+                    </label>
                     <textarea
+                      className={textareaClass}
                       id="notes"
                       rows={5}
                       value={form.notes}
@@ -781,11 +1304,11 @@ export default function CardDetailPage() {
                   </div>
                 </section>
 
-                <div className="action-row">
-                  <button className="button" type="submit" disabled={busy || !authenticated}>
+                <div className={actionRowClass}>
+                  <button className={primaryButtonClass} type="submit" disabled={busy || !authenticated}>
                     {busy ? 'Saving...' : 'Save changes'}
                   </button>
-                  <Link className="button-secondary" href="/binder">
+                  <Link className={secondaryButtonClass} href="/binder">
                     Return to binder
                   </Link>
                 </div>

@@ -2,7 +2,7 @@ export type CsvRow = Record<string, string>;
 
 function parseCsvLine(line: string): string[] {
   const fields: string[] = [];
-  let current = '';
+  let current = "";
   let inQuotes = false;
 
   for (let i = 0; i < line.length; i += 1) {
@@ -19,9 +19,9 @@ function parseCsvLine(line: string): string[] {
       continue;
     }
 
-    if (char === ',' && !inQuotes) {
+    if (char === "," && !inQuotes) {
       fields.push(current.trim());
-      current = '';
+      current = "";
       continue;
     }
 
@@ -34,7 +34,7 @@ function parseCsvLine(line: string): string[] {
 
 export function parseCsv(content: string): CsvRow[] {
   const lines = content
-    .replace(/^\uFEFF/, '')
+    .replace(/^\uFEFF/, "")
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
@@ -51,7 +51,7 @@ export function parseCsv(content: string): CsvRow[] {
     const row: CsvRow = {};
 
     for (let j = 0; j < header.length; j += 1) {
-      row[header[j]] = values[j] ?? '';
+      row[header[j]] = values[j] ?? "";
     }
 
     rows.push(row);

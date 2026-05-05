@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from "@nestjs/common";
 
 type PreviewCacheEntry = {
   imageUrl: string | null;
@@ -42,13 +42,15 @@ export class LinkPreviewService {
 
     try {
       const parsed = new URL(url);
-      return parsed.hostname.toLowerCase() === 'i.ebayimg.com';
+      return parsed.hostname.toLowerCase() === "i.ebayimg.com";
     } catch {
       return false;
     }
   }
 
-  async getTrustedPreviewImage(url: string): Promise<PreviewImagePayload | null> {
+  async getTrustedPreviewImage(
+    url: string,
+  ): Promise<PreviewImagePayload | null> {
     const imageUrl = await this.getPreviewImage(url);
     if (!this.shouldProxyPreviewImage(imageUrl)) {
       return null;
@@ -67,11 +69,11 @@ export class LinkPreviewService {
 
     try {
       const response = await fetch(url, {
-        redirect: 'follow',
+        redirect: "follow",
         signal: controller.signal,
         headers: {
-          'User-Agent':
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36',
+          "User-Agent":
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
         },
       });
 
@@ -79,8 +81,8 @@ export class LinkPreviewService {
         return null;
       }
 
-      const contentType = response.headers.get('content-type') ?? '';
-      if (contentType.startsWith('image/')) {
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType.startsWith("image/")) {
         return response.url || url;
       }
 
@@ -90,7 +92,9 @@ export class LinkPreviewService {
         this.extractFallbackImage(html, response.url || url);
       return image;
     } catch (error) {
-      this.logger.debug(`Preview lookup failed for ${url}: ${(error as Error).message}`);
+      this.logger.debug(
+        `Preview lookup failed for ${url}: ${(error as Error).message}`,
+      );
       return null;
     } finally {
       clearTimeout(timeoutId);
@@ -103,11 +107,11 @@ export class LinkPreviewService {
 
     try {
       const response = await fetch(url, {
-        redirect: 'follow',
+        redirect: "follow",
         signal: controller.signal,
         headers: {
-          'User-Agent':
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36',
+          "User-Agent":
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
         },
       });
 
@@ -115,8 +119,8 @@ export class LinkPreviewService {
         return null;
       }
 
-      const contentType = response.headers.get('content-type') ?? '';
-      if (!contentType.startsWith('image/')) {
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.startsWith("image/")) {
         return null;
       }
 
@@ -126,7 +130,9 @@ export class LinkPreviewService {
         contentType,
       };
     } catch (error) {
-      this.logger.debug(`Image fetch failed for ${url}: ${(error as Error).message}`);
+      this.logger.debug(
+        `Image fetch failed for ${url}: ${(error as Error).message}`,
+      );
       return null;
     } finally {
       clearTimeout(timeoutId);
@@ -190,11 +196,11 @@ export class LinkPreviewService {
     }
 
     if (
-      lower.includes('sprite') ||
-      lower.includes('icon') ||
-      lower.includes('logo') ||
-      lower.includes('avatar') ||
-      lower.includes('favicon')
+      lower.includes("sprite") ||
+      lower.includes("icon") ||
+      lower.includes("logo") ||
+      lower.includes("avatar") ||
+      lower.includes("favicon")
     ) {
       return false;
     }
