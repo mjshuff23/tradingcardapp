@@ -70,10 +70,15 @@ export default function SignupPage() {
               <input
                 className={inputClass}
                 id="username"
+                name="username"
+                type="text"
+                autoComplete="username"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 minLength={3}
                 maxLength={24}
+                pattern="[a-zA-Z0-9_-]+"
+                title="Username must contain only letters, numbers, underscores, and hyphens"
                 required
               />
             </div>
@@ -85,7 +90,9 @@ export default function SignupPage() {
               <input
                 className={inputClass}
                 id="email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 required
@@ -94,15 +101,19 @@ export default function SignupPage() {
 
             <div className={fieldClass}>
               <label className={fieldLabelClass} htmlFor="password">
-                Password
+                Password (at least 12 chars with uppercase, lowercase, number, and symbol)
               </label>
               <input
                 className={inputClass}
                 id="password"
+                name="password"
                 type="password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                minLength={8}
+                minLength={12}
+                pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?&quot;:{}|<>_\-+=[\]\\/'`;~]).+$"
+                title="Password must be at least 12 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one symbol"
                 required
               />
             </div>
