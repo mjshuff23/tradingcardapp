@@ -56,6 +56,13 @@ describe("catalog-normalization.util", () => {
   it("strips explicit card number markers from leftover title text", () => {
     expect(
       stripExplicitCardNumberMentions("Michael Jordan card number #466 SKL"),
-    ).toBe("Michael Jordan  SKL");
+    ).toBe("Michael Jordan SKL");
+  });
+
+  it("does not treat card number labels inside words as explicit mentions", () => {
+    expect(inferCardNumber("Michael Jordan not 466")).toBeNull();
+    expect(stripExplicitCardNumberMentions("Michael Jordan numberplate 466")).toBe(
+      "Michael Jordan numberplate 466",
+    );
   });
 });

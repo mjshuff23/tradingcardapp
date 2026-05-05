@@ -117,7 +117,8 @@ type CardNumberToken = {
   end: number;
 };
 
-const CARD_NUMBER_TOKEN_PATTERN = /#?[a-z]?\d{1,6}[a-z]?|card|number|no\.?/gi;
+const CARD_NUMBER_TOKEN_PATTERN =
+  /#?[a-z]?\d{1,6}[a-z]?|\bcard\b|\bnumber\b|\bno\b\.?/gi;
 
 function cardNumberTokens(value: string): CardNumberToken[] {
   return Array.from(value.matchAll(CARD_NUMBER_TOKEN_PATTERN)).map((match) => {
@@ -230,7 +231,7 @@ export function stripExplicitCardNumberMentions(value: string): string {
     cursor = range.end;
   }
 
-  return stripped + value.slice(cursor);
+  return `${stripped}${value.slice(cursor)}`.replace(/\s+/g, " ").trim();
 }
 
 export function inferCardNumber(
