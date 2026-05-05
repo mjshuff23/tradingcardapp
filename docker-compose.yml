@@ -44,6 +44,8 @@ services:
       dockerfile: apps/backend/Dockerfile
     restart: unless-stopped
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    env_file:
+      - ./apps/backend/.env
     ports:
       - "3001:3001"
     environment:
@@ -100,6 +102,7 @@ services:
     volumes:
       - ./:/app
       - frontend_node_modules:/app/node_modules
+      - frontend_next:/app/apps/frontend/.next
 
 volumes:
   postgres_data:
@@ -107,3 +110,4 @@ volumes:
   garage_data:
   backend_node_modules:
   frontend_node_modules:
+  frontend_next:

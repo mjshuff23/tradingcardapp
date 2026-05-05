@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { cn } from '../lib/ui';
 
 type CardImageProps = {
   src?: string | null;
@@ -11,7 +12,12 @@ export function CardImage({ src, alt, className }: CardImageProps) {
 
   if (!src || failed) {
     return (
-      <div className={`card-image card-image--fallback${className ? ` ${className}` : ''}`}>
+      <div
+        className={cn(
+          'flex aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-[24px] border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] text-sm font-medium uppercase tracking-[0.18em] text-[var(--muted)]',
+          className,
+        )}
+      >
         <span>No image</span>
       </div>
     );
@@ -19,7 +25,10 @@ export function CardImage({ src, alt, className }: CardImageProps) {
 
   return (
     <img
-      className={`card-image${className ? ` ${className}` : ''}`}
+      className={cn(
+        'aspect-[3/4] w-full rounded-[24px] border border-[var(--border)] object-cover shadow-[var(--shadow-sm)]',
+        className,
+      )}
       src={src}
       alt={alt}
       onError={() => setFailed(true)}

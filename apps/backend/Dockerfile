@@ -11,4 +11,4 @@ COPY apps/backend apps/backend
 
 EXPOSE 3001
 
-CMD ["npm", "run", "dev", "-w", "apps/backend"]
+CMD ["npm", "run", "start:docker", "-w", "apps/backend"]
