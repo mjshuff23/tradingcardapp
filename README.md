@@ -121,7 +121,29 @@ npm run db:migrate -w apps/backend
 npm run db:seed -w apps/backend
 ```
 
-If a hosted database already exists and Railway/Railpack fails with Prisma `P3005`, set `PRISMA_BASELINE_ON_P3005=true` for one deploy. The backend startup script will only baseline automatically when the live schema already matches `apps/backend/prisma/schema.prisma`. Remove the flag after the first successful deploy.
+Railway / hosted database rescue is now explicit instead of happening during app startup.
+
+Inspect the target database first:
+
+```bash
+TARGET_DATABASE_URL="postgres://..." npm run db:railway:inspect
+```
+
+If the database is still on the legacy pre-normalized `Card` table, export the catalog, migrate a clean database, then import:
+
+```bash
+TARGET_DATABASE_URL="postgres://legacy-db" npm run db:catalog:export
+TARGET_DATABASE_URL="postgres://clean-db" npm exec -w apps/backend prisma migrate deploy
+TARGET_DATABASE_URL="postgres://clean-db" npm run db:catalog:import
+```
+
+If the database already matches the current normalized Prisma schema and only lacks `_prisma_migrations`, verify the diff is empty and then mark migrations as applied once:
+
+```bash
+TARGET_DATABASE_URL="postgres://..." npm run db:railway:mark-applied
+```
+
+`start:prod` no longer tries to auto-baseline `P3005` at boot. Partial drift should be treated as a manual rescue task, not something hidden inside deployment startup.
 
 To export legacy local `Card` rows into the normalized catalog seed before a reset:
 
@@ -172,11 +194,20 @@ Backend env wiring for AWS-compatible storage:
 - `S3_SECRET_KEY`
 - `S3_REGION`
 
+Operational scripts for media cutover:
+
+```bash
+npm run storage:verify -w apps/backend
+npm run storage:migrate:s3 -w apps/backend
+```
+
+Migration uses the configured target `S3_*` variables and optional `SOURCE_S3_*` variables for the current source storage. Object keys are preserved exactly; legacy HTTP URLs and `local/*` paths are skipped.
+
 ## Notes
 
 - OCR defaults to `tesseract` in backend (`OCR_PROVIDER=tesseract`) with fallback mode available via `OCR_PROVIDER=stub`.
-- Reverse lookup defaults to `duckduckgo` only (`LOOKUP_PROVIDERS=duckduckgo`) to avoid paid cloud usage.
+- Reverse lookup always includes `duckduckgo`, and automatically layers in `google_vision` when Google Vision credentials are configured.
 - Scan upload supports `image` (front, required) and `backImage` (optional but recommended).
-- Matching now uses weighted scoring with structured OCR hints (`year`, `card number`, `brand`) when available.
+- Matching now uses weighted scoring with structured OCR hints (`year`, `card number`, `brand`, `season`, `set`) when available.
 - CSV import supports `imageUrl`/`image_url` to fetch card images and store them in Garage/S3.
 - Validation now uses lexical scoring; scan review links come from lookup hints (DuckDuckGo/web lookup).

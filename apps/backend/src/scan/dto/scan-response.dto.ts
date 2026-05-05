@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ScanStatus } from '../../prisma/client';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ScanStatus } from "../../prisma/client";
 
 export class ValidationHintDto {
   @ApiProperty()
@@ -32,7 +32,22 @@ export class ScanCandidateDto {
   set!: string | null;
 
   @ApiProperty({ nullable: true })
+  setName!: string | null;
+
+  @ApiProperty({ nullable: true })
+  legacySetText!: string | null;
+
+  @ApiProperty({ nullable: true })
+  brand!: string | null;
+
+  @ApiProperty({ nullable: true })
   year!: number | null;
+
+  @ApiProperty({ nullable: true })
+  season!: string | null;
+
+  @ApiProperty({ nullable: true })
+  cardNumber!: string | null;
 
   @ApiProperty({ nullable: true })
   player!: string | null;
@@ -51,6 +66,9 @@ export class ScanCandidateDto {
 
   @ApiProperty({ type: [ValidationHintDto], nullable: true })
   sourceHints!: ValidationHintDto[] | null;
+
+  @ApiPropertyOptional({ type: Object, nullable: true })
+  diagnostics?: Record<string, unknown> | null;
 
   @ApiProperty()
   chosen!: boolean;
@@ -71,6 +89,9 @@ export class ScanResponseDto {
 
   @ApiProperty({ nullable: true })
   error!: string | null;
+
+  @ApiPropertyOptional({ type: Object, nullable: true })
+  diagnostics?: Record<string, unknown> | null;
 
   @ApiProperty({ nullable: true })
   frontImageUrl!: string | null;

@@ -1,5 +1,5 @@
 export type SourceHint = {
-  source: 'ebay_sold' | 'psa' | 'web_lookup';
+  source: "ebay_sold" | "psa" | "web_lookup";
   url: string;
   title: string;
   score: number;

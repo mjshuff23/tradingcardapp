@@ -1,15 +1,22 @@
-import { Module } from '@nestjs/common';
-import { AuthModule } from '../auth/auth.module';
-import { StorageService } from '../storage/storage.service';
-import { CatalogQueryService } from './catalog-query.service';
-import { CatalogController } from './catalog.controller';
-import { CatalogIndexService } from './catalog-index.service';
-import { CatalogService } from './catalog.service';
+import { Module } from "@nestjs/common";
+import { AuthModule } from "../auth/auth.module";
+import { StorageService } from "../storage/storage.service";
+import { CatalogQueryService } from "./catalog-query.service";
+import { CatalogController } from "./catalog.controller";
+import { CatalogIndexService } from "./catalog-index.service";
+import { CatalogService } from "./catalog.service";
+import { TitleNormalizationService } from "./title-normalization.service";
 
 @Module({
   imports: [AuthModule],
   controllers: [CatalogController],
-  providers: [CatalogService, CatalogIndexService, CatalogQueryService, StorageService],
-  exports: [CatalogService, CatalogIndexService],
+  providers: [
+    CatalogService,
+    CatalogIndexService,
+    CatalogQueryService,
+    StorageService,
+    TitleNormalizationService,
+  ],
+  exports: [CatalogService, CatalogIndexService, TitleNormalizationService],
 })
 export class CatalogModule {}

@@ -1,4 +1,4 @@
-import { normalizeText } from './normalize.util';
+import { normalizeText } from "./normalize.util";
 
 export type CardKeyInput = {
   name: string;
@@ -13,11 +13,11 @@ export function buildCardKey(input: CardKeyInput): string {
   return [
     normalizeText(input.name),
     normalizeText(input.set),
-    input.year ? String(input.year) : '',
+    input.year ? String(input.year) : "",
     normalizeText(input.player),
     normalizeText(input.variant),
     normalizeText(input.sport),
   ]
     .filter(Boolean)
-    .join('|');
+    .join("|");
 }

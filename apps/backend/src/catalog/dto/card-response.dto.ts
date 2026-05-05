@@ -1,5 +1,12 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { CollectionStatus } from '../../prisma/client';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { CollectionStatus } from "../../prisma/client";
+
+export enum CardImageSourceDto {
+  USER = "USER",
+  CANONICAL = "CANONICAL",
+  LEGACY = "LEGACY",
+  NONE = "NONE",
+}
 
 export class CardSetDto {
   @ApiProperty()
@@ -38,7 +45,11 @@ export class CardSetDto {
   @ApiProperty({ nullable: true })
   material!: string | null;
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true, nullable: true })
+  @ApiPropertyOptional({
+    type: "object",
+    additionalProperties: true,
+    nullable: true,
+  })
   metadata!: Record<string, unknown> | null;
 }
 
@@ -73,7 +84,11 @@ export class CardDefinitionDto {
   @ApiProperty()
   hasAutographVariant!: boolean;
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true, nullable: true })
+  @ApiPropertyOptional({
+    type: "object",
+    additionalProperties: true,
+    nullable: true,
+  })
   features!: Record<string, unknown> | null;
 
   @ApiProperty({ nullable: true })
@@ -94,7 +109,11 @@ export class CardDefinitionDto {
   @ApiProperty()
   isVintage!: boolean;
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true, nullable: true })
+  @ApiPropertyOptional({
+    type: "object",
+    additionalProperties: true,
+    nullable: true,
+  })
   metadata!: Record<string, unknown> | null;
 
   @ApiProperty({ type: CardSetDto, nullable: true })
@@ -106,19 +125,13 @@ export class CardCollectionRecordDto {
   collectionStatus!: CollectionStatus;
 
   @ApiProperty({ nullable: true })
-  imageUrl!: string | null;
+  personalImageUrl!: string | null;
 
   @ApiProperty({ nullable: true })
-  originalImageKey!: string | null;
+  frontImageUrl!: string | null;
 
   @ApiProperty({ nullable: true })
-  thumbnailImageKey!: string | null;
-
-  @ApiProperty({ nullable: true })
-  frontImageKey!: string | null;
-
-  @ApiProperty({ nullable: true })
-  backImageKey!: string | null;
+  backImageUrl!: string | null;
 
   @ApiProperty({ nullable: true })
   condition!: string | null;
@@ -172,6 +185,21 @@ export class CardListItemDto {
 
   @ApiProperty({ nullable: true })
   imageUrl!: string | null;
+
+  @ApiProperty({ enum: CardImageSourceDto })
+  imageSource!: CardImageSourceDto;
+
+  @ApiProperty({ nullable: true })
+  canonicalImageUrl!: string | null;
+
+  @ApiProperty({ nullable: true })
+  personalImageUrl!: string | null;
+
+  @ApiProperty({ nullable: true })
+  frontImageUrl!: string | null;
+
+  @ApiProperty({ nullable: true })
+  backImageUrl!: string | null;
 
   @ApiProperty({ enum: CollectionStatus })
   collectionStatus!: CollectionStatus;

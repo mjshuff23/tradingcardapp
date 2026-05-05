@@ -1,4 +1,4 @@
-import { tokenize } from './normalize.util';
+import { tokenize } from "./normalize.util";
 
 export function levenshteinSimilarity(left: string, right: string): number {
   if (!left && !right) {
@@ -14,7 +14,9 @@ export function levenshteinSimilarity(left: string, right: string): number {
 
   const rows = a.length + 1;
   const cols = b.length + 1;
-  const matrix: number[][] = Array.from({ length: rows }, () => Array(cols).fill(0));
+  const matrix: number[][] = Array.from({ length: rows }, () =>
+    Array(cols).fill(0),
+  );
 
   for (let i = 0; i < rows; i += 1) {
     matrix[i][0] = i;
@@ -40,7 +42,10 @@ export function levenshteinSimilarity(left: string, right: string): number {
   return Number((1 - distance / maxLength).toFixed(3));
 }
 
-export function tokenCoverageScore(sourceText: string, targetText: string): number {
+export function tokenCoverageScore(
+  sourceText: string,
+  targetText: string,
+): number {
   const sourceTokens = new Set(tokenize(sourceText));
   const targetTokens = tokenize(targetText);
 
