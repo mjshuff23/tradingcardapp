@@ -1,13 +1,13 @@
 export function normalizeText(value: string | null | undefined): string {
   if (!value) {
-    return '';
+    return "";
   }
 
   return value
     .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
+    .normalize("NFKD")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -17,7 +17,7 @@ export function tokenize(value: string | null | undefined): string[] {
     return [];
   }
 
-  return normalized.split(' ').filter(Boolean);
+  return normalized.split(" ").filter(Boolean);
 }
 
 export function overlapScore(left: string[], right: string[]): number {

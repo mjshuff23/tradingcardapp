@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ImportStatus } from '../../prisma/client';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ImportStatus } from "../../prisma/client";
 
 export class ImportSummaryDto {
   @ApiProperty()
@@ -43,7 +43,11 @@ export class ImportJobDto {
   @ApiProperty()
   errorCount!: number;
 
-  @ApiPropertyOptional({ type: 'array', nullable: true, items: { type: 'object', additionalProperties: true } })
+  @ApiPropertyOptional({
+    type: "array",
+    nullable: true,
+    items: { type: "object", additionalProperties: true },
+  })
   errors!: Array<Record<string, unknown>> | null;
 }
 

@@ -20,6 +20,10 @@
     "clean:dev-cache": "bash scripts/fix-dev-perms.sh",
     "fix:docker-node-modules": "bash scripts/fix-docker-node-modules.sh",
     "refresh:docker:backend": "bash scripts/refresh-docker-backend.sh",
+    "db:catalog:export": "npm run db:catalog:export -w apps/backend",
+    "db:catalog:import": "npm run db:catalog:import -w apps/backend",
+    "db:railway:inspect": "npm run db:railway:inspect -w apps/backend",
+    "db:railway:mark-applied": "npm run db:railway:mark-applied -w apps/backend",
     "infra:terraform:fmt": "terraform -chdir=infra/terraform fmt -recursive",
     "infra:terraform:validate": "terraform -chdir=infra/terraform init -backend=false && terraform -chdir=infra/terraform validate",
     "dev": "turbo run dev --parallel",
@@ -36,13 +40,20 @@
     "@prisma/client": "7.6.0"
   },
   "overrides": {
-    "ajv": "8.18.0",
+    "@eslint/eslintrc": {
+      "ajv": "6.12.6"
+    },
     "lodash": "4.18.1",
     "path-to-regexp": "8.4.2",
     "picomatch": "4.0.4"
   },
   "devDependencies": {
     "prisma": "7.6.0",
-    "turbo": "^2.0.0"
+    "turbo": "^2.0.0",
+    "eslint": "8.57.1",
+    "@typescript-eslint/eslint-plugin": "8.58.1",
+    "@typescript-eslint/parser": "8.58.1",
+    "eslint-config-prettier": "9.1.2",
+    "eslint-plugin-prettier": "5.5.5"
   }
 }

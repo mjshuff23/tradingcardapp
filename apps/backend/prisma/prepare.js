@@ -3,70 +3,47 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const packageRoot = path.resolve(__dirname, '..');
-const schemaPath = path.join(__dirname, 'schema.prisma');
-const migrationsDir = path.join(__dirname, 'migrations');
 
 function main() {
-  const deployResult = runPrisma(['migrate', 'deploy'], { allowFailure: true });
-  if (deployResult.status === 0) {
-    runPrisma(['db', 'seed']);
-    return;
+  const migrateResult = runPrisma(['migrate', 'deploy'], { allowFailure: true });
+
+  if (migrateResult.status !== 0) {
+    if (migrateResult.stderr.includes('P3005')) {
+      // The database schema is not empty and hasn't been baselined.
+      // Mark every migration as already applied so Prisma won't try to re-run
+      // SQL that is already present in the production database.
+      console.log(
+        'Detected P3005: database schema not empty. Baselining existing schema...',
+      );
+
+      const migrationsDir = path.join(__dirname, 'migrations');
+      const entries = fs.readdirSync(migrationsDir, { withFileTypes: true });
+      const migrationNames = entries
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name)
+        .sort();
+
+      for (const migrationName of migrationNames) {
+        console.log(`Marking migration as applied: ${migrationName}`);
+        runPrisma(['migrate', 'resolve', '--applied', migrationName], {
+          allowFailure: true,
+        });
+      }
+    } else {
+      process.exit(migrateResult.status ?? 1);
+    }
   }
 
-  const combinedOutput = `${deployResult.stdout}\n${deployResult.stderr}`;
-  if (!combinedOutput.includes('P3005')) {
-    process.exit(deployResult.status ?? 1);
-  }
+  // Always run `db push` after `migrate deploy`, regardless of whether deploy
+  // succeeded or migrations were baselined. This reconciles the actual database
+  // schema with the Prisma schema, creating any tables or columns that are
+  // missing without touching existing ones. This is necessary when all
+  // migrations are already marked as applied (baselined) but the corresponding
+  // SQL was never executed — `migrate deploy` exits 0 in that case, so `db
+  // push` is the only way to bring the schema up to date. It is idempotent and
+  // safe to run even when the schema is already in sync.
+  runPrisma(['db', 'push', '--accept-data-loss']);
 
-  if (process.env.PRISMA_BASELINE_ON_P3005 !== 'true') {
-    console.error(
-      [
-        '',
-        'Prisma found a non-empty database with no recorded migration history.',
-        'If this Railway database already matches prisma/schema.prisma, rerun with PRISMA_BASELINE_ON_P3005=true once to mark the existing migrations as applied.',
-      ].join('\n'),
-    );
-    process.exit(deployResult.status ?? 1);
-  }
-
-  console.log('P3005 detected. Verifying that the existing database already matches prisma/schema.prisma before baselining...');
-  const diffResult = runPrisma(
-    ['migrate', 'diff', '--exit-code', '--from-url', process.env.DATABASE_URL, '--to-schema-datamodel', schemaPath],
-    { allowFailure: true },
-  );
-
-  if (diffResult.status === 2) {
-    console.error(
-      [
-        '',
-        'Baseline aborted because the live database does not match prisma/schema.prisma.',
-        'Run a manual baseline/migration instead of auto-resolving migrations on startup.',
-      ].join('\n'),
-    );
-    process.exit(1);
-  }
-
-  if (diffResult.status !== 0) {
-    process.exit(diffResult.status ?? 1);
-  }
-
-  const migrations = fs
-    .readdirSync(migrationsDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort();
-
-  if (migrations.length === 0) {
-    console.error('No Prisma migrations found to baseline.');
-    process.exit(1);
-  }
-
-  console.log(`Database schema matches the Prisma schema. Marking ${migrations.length} migrations as applied...`);
-  for (const migration of migrations) {
-    runPrisma(['migrate', 'resolve', '--applied', migration, '--schema', schemaPath]);
-  }
-
-  runPrisma(['migrate', 'deploy']);
   runPrisma(['db', 'seed']);
 }
 

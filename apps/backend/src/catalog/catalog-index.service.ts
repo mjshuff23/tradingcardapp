@@ -1,10 +1,10 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "../prisma/prisma.service";
 import {
   CatalogDraftInput,
   deriveCatalogDraft,
   normalizeNullableText,
-} from '../common/catalog-normalization.util';
+} from "../common/catalog-normalization.util";
 
 @Injectable()
 export class CatalogIndexService {

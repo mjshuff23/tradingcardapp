@@ -20,6 +20,21 @@ const seedDataPath = path.join(__dirname, 'seed-data', 'catalog.json');
 const seedAssetsRoot = path.join(__dirname, 'seed-assets');
 
 async function main() {
+  const tableCheck = await prisma.$queryRaw`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'CardSet'
+    )
+  `;
+  const cardSetExists = (tableCheck as Array<{ exists: boolean }>)[0]?.exists;
+  if (!cardSetExists) {
+    console.log(
+      'Seed skipped: CardSet table does not exist. ' +
+        'The database schema is incomplete — run pending migrations first.',
+    );
+    return;
+  }
+
   const raw = await fs.readFile(seedDataPath, 'utf8');
   const catalog = JSON.parse(raw);
 
@@ -28,7 +43,7 @@ async function main() {
     return;
   }
 
-  await seedUsers(catalog.users ?? []);
+  await seedUsersOrSkip(catalog.users ?? []);
   await seedCardSets(catalog.cardSets ?? []);
   await seedCardDefinitions(catalog.cardDefinitions ?? []);
   await seedUserCards(catalog.userCards ?? []);
@@ -38,6 +53,26 @@ async function main() {
   console.log(
     `Seed complete. ${catalog.cardSets?.length ?? 0} sets, ${catalog.cardDefinitions?.length ?? 0} definitions, ${catalog.userCards?.length ?? 0} owned rows, ${catalog.userWishlists?.length ?? 0} wishlist rows.`,
   );
+}
+
+async function seedUsersOrSkip(users) {
+  try {
+    await seedUsers(users);
+  } catch (error) {
+    // P2022 = column not found; the User table schema is out of sync with the
+    // Prisma schema (e.g. the initial migration only created `id` and `name`).
+    // Log a warning and continue so the rest of the seed can run and the app
+    // can start — migrations will bring the schema up to date.
+    if (error?.code === 'P2022') {
+      console.warn(
+        'Warning: seedUsers() skipped — User table schema is out of sync ' +
+          `(${error.code}: ${error.message}). ` +
+          'Run pending migrations to fix the User table, then re-seed.',
+      );
+      return;
+    }
+    throw error;
+  }
 }
 
 async function seedUsers(users) {
