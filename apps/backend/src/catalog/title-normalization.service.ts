@@ -5,6 +5,7 @@ import {
   inferCardNumber,
   normalizeNullableNumber,
   normalizeNullableText,
+  stripExplicitCardNumberMentions,
 } from "../common/catalog-normalization.util";
 import { normalizeText } from "../common/normalize.util";
 import { CatalogSearchFilters } from "./catalog-query.service";
@@ -132,10 +133,7 @@ export class TitleNormalizationService {
     if (cardNumber) {
       fields.cardNumber = cardNumber;
       fieldConfidence.cardNumber = 0.94;
-      working = working.replace(
-        /(?:card\s*(?:no|number)?\s*#?\s*|number\s*#?\s*|#\s*)([a-z]?\d{1,6}[a-z]?)/gi,
-        " ",
-      );
+      working = stripExplicitCardNumberMentions(working);
     }
 
     const explicitBrand = inferBrand(seeded.brand ?? normalizedRawTitle);
