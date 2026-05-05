@@ -1,3 +1,4 @@
+import { extractExplicitCardNumbers } from "./catalog-normalization.util";
 import { normalizeText } from "./normalize.util";
 
 export type StructuredCardHints = {
@@ -80,11 +81,7 @@ export function parseStructuredCardHints(
     ].filter((year) => year >= 1900 && year <= 2099),
   );
 
-  const explicitCardNumbers = Array.from(
-    lowered.matchAll(
-      /(?:card\s*(?:no|number|#)?\s*|no\.?\s*|number\s*|#\s*)([a-z]?\d{1,6}[a-z]?)/g,
-    ),
-  ).map((match) => match[1].toUpperCase());
+  const explicitCardNumbers = extractExplicitCardNumbers(primaryText);
 
   const slabStyleNumbers = Array.from(
     lowered.matchAll(/#\s*([a-z0-9]{3,8})\b/g),

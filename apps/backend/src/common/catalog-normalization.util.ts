@@ -105,6 +105,135 @@ export function inferSeason(
   return null;
 }
 
+type CardNumberMention = {
+  cardNumber: string;
+  start: number;
+  end: number;
+};
+
+type CardNumberToken = {
+  text: string;
+  start: number;
+  end: number;
+};
+
+const CARD_NUMBER_TOKEN_PATTERN =
+  /#?[a-z]?\d{1,6}[a-z]?|\bcard\b|\bnumber\b|\bno\b\.?/gi;
+
+function cardNumberTokens(value: string): CardNumberToken[] {
+  return Array.from(value.matchAll(CARD_NUMBER_TOKEN_PATTERN)).map((match) => {
+    const start = match.index ?? 0;
+    return {
+      text: match[0],
+      start,
+      end: start + match[0].length,
+    };
+  });
+}
+
+function normalizeCardNumberToken(token: string): string | null {
+  const withoutHash = token.startsWith("#") ? token.slice(1) : token;
+  return /^[a-z]?\d{1,6}[a-z]?$/i.test(withoutHash)
+    ? withoutHash.toUpperCase()
+    : null;
+}
+
+function isNumberLabel(token: string): boolean {
+  const normalized = token.toLowerCase();
+  return normalized === "number" || normalized === "no" || normalized === "no.";
+}
+
+function findExplicitCardNumberMentions(value: string): CardNumberMention[] {
+  const tokens = cardNumberTokens(value);
+  const mentions: CardNumberMention[] = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const lowerToken = token.text.toLowerCase();
+
+    if (token.text.startsWith("#")) {
+      const cardNumber = normalizeCardNumberToken(token.text);
+      if (cardNumber) {
+        mentions.push({ cardNumber, start: token.start, end: token.end });
+      }
+      continue;
+    }
+
+    if (lowerToken === "card") {
+      let numberIndex = index + 1;
+      if (tokens[numberIndex] && isNumberLabel(tokens[numberIndex].text)) {
+        numberIndex += 1;
+      }
+
+      const cardNumber = tokens[numberIndex]
+        ? normalizeCardNumberToken(tokens[numberIndex].text)
+        : null;
+      if (cardNumber) {
+        mentions.push({
+          cardNumber,
+          start: token.start,
+          end: tokens[numberIndex].end,
+        });
+      }
+      continue;
+    }
+
+    if (isNumberLabel(token.text)) {
+      const numberToken = tokens[index + 1];
+      const cardNumber = numberToken
+        ? normalizeCardNumberToken(numberToken.text)
+        : null;
+      if (cardNumber) {
+        mentions.push({
+          cardNumber,
+          start: token.start,
+          end: numberToken.end,
+        });
+      }
+    }
+  }
+
+  return mentions;
+}
+
+export function extractExplicitCardNumbers(value: string): string[] {
+  return Array.from(
+    new Set(
+      findExplicitCardNumberMentions(value).map((match) => match.cardNumber),
+    ),
+  );
+}
+
+export function stripExplicitCardNumberMentions(value: string): string {
+  const mentions = findExplicitCardNumberMentions(value).sort(
+    (left, right) => left.start - right.start || left.end - right.end,
+  );
+  const ranges: Array<{ start: number; end: number }> = [];
+
+  for (const mention of mentions) {
+    const previous = ranges[ranges.length - 1];
+    if (previous && mention.start <= previous.end) {
+      previous.end = Math.max(previous.end, mention.end);
+    } else {
+      ranges.push({ start: mention.start, end: mention.end });
+    }
+  }
+
+  let stripped = "";
+  let cursor = 0;
+  for (const range of ranges) {
+    stripped += value.slice(cursor, range.start);
+    const hasSpaceBefore = /\s/.test(value.charAt(range.start - 1));
+    const hasSpaceAfter = /\s/.test(value.charAt(range.end));
+    if (!hasSpaceBefore || !hasSpaceAfter) {
+      stripped += " ";
+    }
+    cursor = range.end;
+  }
+
+  return `${stripped}${value.slice(cursor)}`.replace(/\s+/g, " ").trim();
+}
+
 export function inferCardNumber(
   ...values: Array<string | null | undefined>
 ): string | null {
@@ -116,11 +245,9 @@ export function inferCardNumber(
       continue;
     }
 
-    const explicitMatch = normalized.match(
-      /(?:card\s*(?:no|number)?\s*#?\s*|number\s*#?\s*|#\s*)([a-z]?\d{1,6}[a-z]?)/i,
-    );
-    if (explicitMatch?.[1]) {
-      return explicitMatch[1].toUpperCase();
+    const explicitMatches = extractExplicitCardNumbers(normalized);
+    if (explicitMatches.length) {
+      return explicitMatches[0];
     }
 
     const standaloneMatch = normalized.match(/^\s*([a-z]?\d{1,6}[a-z]?)\s*$/i);

@@ -3,6 +3,7 @@ import {
   buildNormalizedSetKey,
   deriveCatalogDraft,
   inferCardNumber,
+  stripExplicitCardNumberMentions,
 } from "../src/common/catalog-normalization.util";
 
 describe("catalog-normalization.util", () => {
@@ -50,5 +51,18 @@ describe("catalog-normalization.util", () => {
         null,
       ),
     ).toBe("466");
+  });
+
+  it("strips explicit card number markers from leftover title text", () => {
+    expect(
+      stripExplicitCardNumberMentions("Michael Jordan card number #466 SKL"),
+    ).toBe("Michael Jordan SKL");
+  });
+
+  it("does not treat card number labels inside words as explicit mentions", () => {
+    expect(inferCardNumber("Michael Jordan not 466")).toBeNull();
+    expect(stripExplicitCardNumberMentions("Michael Jordan numberplate 466")).toBe(
+      "Michael Jordan numberplate 466",
+    );
   });
 });
