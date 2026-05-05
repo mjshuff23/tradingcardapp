@@ -1,6 +1,7 @@
 import { tavily } from "@tavily/core";
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { parseHTML } from "linkedom";
 import {
   inferBrand,
   inferCardNumber,
@@ -467,11 +468,15 @@ export class ScanEnrichmentService {
       )
         .map((match) => match[1])
         .join(" ");
-      const plainText = this.stripHtml(
-        html
-          .replace(/<script[\s\S]*?<\/script>/gi, " ")
-          .replace(/<style[\s\S]*?<\/style>/gi, " "),
-      )
+      const { document } = parseHTML(html);
+      for (const element of Array.from(
+        document.querySelectorAll("script,style"),
+      )) {
+        element.remove();
+      }
+      const sanitizedHtmlWithoutScriptsAndStyles =
+        document.documentElement?.outerHTML ?? html;
+      const plainText = this.stripHtml(sanitizedHtmlWithoutScriptsAndStyles)
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 3200);
